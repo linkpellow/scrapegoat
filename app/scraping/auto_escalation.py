@@ -116,12 +116,21 @@ class AutoEscalationEngine:
     
     TIER_ORDER = ["http", "playwright", "provider"]
     
-    def __init__(self, engine_mode: str = "auto"):
+    # Domains known to aggressively block non-browser traffic
+    # Skip HTTP entirely, start with Playwright
+    HOSTILE_DOMAINS = {
+        "www.fastpeoplesearch.com",
+        "fastpeoplesearch.com",
+    }
+    
+    def __init__(self, engine_mode: str = "auto", domain: str = None):
         """
         Args:
             engine_mode: "auto" (intelligent), "http", "playwright", or "provider" (forced)
+            domain: Optional domain for intelligent routing
         """
         self.engine_mode = engine_mode
+        self.domain = domain
         self.attempts: List[Dict[str, Any]] = []
     
     def should_escalate_from_http(
@@ -135,11 +144,23 @@ class AutoEscalationEngine:
         Determine if we should escalate from HTTP to Playwright.
         
         Triggers:
+        - Block status codes (401/403/429) - HARD TRIGGER
         - JS framework detected in HTML
         - Extraction confidence failure (0 matches on required selectors)
         - Meta robots noindex (often JS-gated content)
         """
         signals = []
+        
+        # ⚡ CRITICAL: Check for block status codes FIRST
+        # 403/401/429 = immediate escalation to browser
+        if status_code in EscalationSignal.BLOCK_STATUS_CODES:
+            signals.append(f"status_{status_code}")
+            return EscalationDecision(
+                from_engine="http",
+                to_engine="playwright",
+                reason="blocked_status_code",
+                signals=signals
+            )
         
         # Check for JS app markers
         js_signals = EscalationSignal.detect_js_app(html)
@@ -229,7 +250,10 @@ class AutoEscalationEngine:
     def get_initial_engine(self) -> str:
         """Get the initial engine based on mode."""
         if self.engine_mode == "auto":
-            return "http"  # Always start with cheapest
+            # Check if domain is known to be hostile to HTTP
+            if self.domain in self.HOSTILE_DOMAINS:
+                return "playwright"  # Skip HTTP entirely
+            return "http"  # Start with cheapest
         else:
             return self.engine_mode  # Force specific engine
     

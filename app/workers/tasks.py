@@ -311,8 +311,9 @@ def execute_run(self: Task, run_id: str) -> None:
             engine_mode = getattr(job, 'engine_mode', 'auto')
         
         # Initialize auto-escalation engine
-        logger.info(f"Run {run_id}: Initializing AutoEscalationEngine with mode={engine_mode}")
-        escalation = AutoEscalationEngine(engine_mode=engine_mode)
+        domain = extract_domain(job.target_url)
+        logger.info(f"Run {run_id}: Initializing AutoEscalationEngine with mode={engine_mode}, domain={domain}")
+        escalation = AutoEscalationEngine(engine_mode=engine_mode, domain=domain)
         logger.info(f"Run {run_id}: AutoEscalationEngine initialized")
         
         # Determine initial engine (already set by provider routing if needed)
