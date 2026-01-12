@@ -424,25 +424,33 @@ def execute_run(self: Task, run_id: str) -> None:
                                 break
                     
                     # Persist records
-                    # Save records with proper error handling
+                    # CRITICAL FIX: Clear session and save in fresh transaction
+                    logger.info(f"Preparing to save {len(items)} records - clearing session state")
+                    
+                    # Step 1: Clear any stale transaction state
+                    try:
+                        db.rollback()
+                    except Exception:
+                        pass
+                    
+                    # Step 2: Reload run in fresh state
+                    db.expire_all()
+                    run = db.query(Run).filter(Run.id == run_id).first()
+                    
+                    # Step 3: Save records in clean transaction
                     inserted = 0
                     for it in items:
                         try:
-                            db.add(Record(run_id=run.id, data=it))
-                            db.flush()  # Flush to catch errors early
+                            record = Record(run_id=run.id, data=it)
+                            db.add(record)
                             inserted += 1
                         except Exception as e:
-                            logger.error(f"Failed to insert record: {e}")
-                            db.rollback()  # Rollback failed insert
+                            logger.error(f"Failed to add record to session: {e}")
                             continue
                     
-                    # Store attempt log (skip if column doesn't exist)
-                    try:
-                        if hasattr(run, 'engine_attempts'):
-                            run.engine_attempts = escalation.get_attempts_log()
-                    except Exception:
-                        pass  # Column doesn't exist - skip
+                    logger.info(f"Added {inserted} records to session, committing...")
                     
+                    # Step 4: Update run stats
                     stats = {
                         "records_inserted": inserted,
                         "engine_used": current_engine,
@@ -452,19 +460,38 @@ def execute_run(self: Task, run_id: str) -> None:
                         "domain": extract_domain(job.target_url),
                         "bias_reason": bias_reason,
                     }
-                    complete_run(db, run, stats)
                     
-                    # Final commit with retry
+                    run.status = "completed"
+                    run.finished_at = datetime.now(timezone.utc)
+                    run.stats = stats
+                    
+                    # Step 5: Commit everything in one transaction
                     try:
                         db.commit()
+                        logger.info(f"✅ Successfully saved {inserted} records for run {run_id}")
                     except Exception as e:
-                        logger.error(f"First commit failed: {e}, retrying in fresh transaction")
+                        logger.error(f"Commit failed: {e}, attempting recovery...")
                         db.rollback()
-                        # Reload run and update stats
-                        run = db.query(Run).filter(Run.id == run_id).first()
-                        if run:
-                            complete_run(db, run, stats)
-                            db.commit()
+                        
+                        # Recovery: Save records in separate session
+                        from app.database import SessionLocal
+                        recovery_db = SessionLocal()
+                        try:
+                            for it in items:
+                                recovery_db.add(Record(run_id=run_id, data=it))
+                            
+                            recovery_run = recovery_db.query(Run).filter(Run.id == run_id).first()
+                            recovery_run.status = "completed"
+                            recovery_run.finished_at = datetime.now(timezone.utc)
+                            recovery_run.stats = stats
+                            
+                            recovery_db.commit()
+                            logger.info(f"✅ Recovery successful: saved {len(items)} records")
+                        except Exception as e2:
+                            logger.error(f"Recovery also failed: {e2}")
+                            recovery_db.rollback()
+                        finally:
+                            recovery_db.close()
                     
                     # ADAPTIVE INTELLIGENCE: Record successful outcome (separate transaction)
                     try:
