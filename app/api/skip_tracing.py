@@ -179,10 +179,14 @@ def _execute_with_fallback(
             logger.info(f"Trying {site_name} for {search_type}")
             
             # Create job
+            logger.info(f"[FALLBACK] Creating job for {site_name}")
             job_id = _create_scraper_job(site_name, search_type, search_params)
+            logger.info(f"[FALLBACK] Job created: {job_id}")
             
             # Execute and wait
+            logger.info(f"[FALLBACK] Executing and waiting for {job_id}")
             records, _ = _execute_and_wait(job_id, site_name, timeout)
+            logger.info(f"[FALLBACK] Got {len(records)} records")
             
             if records:
                 logger.info(f"Success with {site_name}: {len(records)} records")
@@ -263,12 +267,15 @@ def search_by_name(
     
     Example: name="John Smith", page=1
     """
+    logger.info(f"[ENDPOINT] search_by_name called: name={name}, page={page}")
     # Execute with fallback
+    logger.info(f"[ENDPOINT] Calling _execute_with_fallback")
     records, site_used = _execute_with_fallback(
         search_type="search_by_name",
         search_params={"name": name, "page": str(page)},
         timeout=60
     )
+    logger.info(f"[ENDPOINT] _execute_with_fallback returned {len(records)} records from {site_used}")
     
     # Parse results
     parsed = PeopleSearchAdapter.parse_search_results(records, site_used)
