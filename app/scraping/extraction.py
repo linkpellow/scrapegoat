@@ -2,6 +2,55 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 import re
+import json
+
+
+def extract_jsonld_from_html(html: str, jsonld_type: Optional[str] = None) -> List[Dict[str, Any]]:
+    """
+    Extract JSON-LD structured data from HTML.
+    
+    Args:
+        html: HTML content
+        jsonld_type: Optional filter by @type (e.g., "Person", "Product")
+    
+    Returns:
+        List of JSON-LD objects found
+    """
+    from parsel import Selector
+    sel = Selector(text=html)
+    
+    # Find all JSON-LD script tags
+    jsonld_scripts = sel.css('script[type="application/ld+json"]::text').getall()
+    
+    results = []
+    for script_content in jsonld_scripts:
+        try:
+            data = json.loads(script_content)
+            
+            # Handle @graph wrapper
+            if isinstance(data, dict) and "@graph" in data:
+                items = data["@graph"]
+            elif isinstance(data, list):
+                items = data
+            else:
+                items = [data]
+            
+            # Filter by type if specified
+            for item in items:
+                if not isinstance(item, dict):
+                    continue
+                    
+                if jsonld_type:
+                    item_type = item.get("@type", "")
+                    if item_type == jsonld_type:
+                        results.append(item)
+                else:
+                    results.append(item)
+                    
+        except json.JSONDecodeError:
+            continue
+    
+    return results
 
 
 def _apply_regex(value: Any, regex: Optional[str]) -> Any:
