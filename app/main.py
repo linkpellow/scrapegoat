@@ -5,6 +5,7 @@ from app.api.interventions import router as intervention_router
 from app.api import skip_tracing
 from app.api.events import router as events_router
 from app.api.session_stats import router as session_router
+from app.api.debug import router as debug_router
 from app.database import init_db
 
 app = FastAPI(title="Scraper Platform Control Plane")
@@ -33,6 +34,7 @@ app.include_router(intervention_router, prefix="/interventions", tags=["interven
 app.include_router(skip_tracing.router, prefix="/skip-tracing", tags=["skip-tracing"])
 app.include_router(events_router, prefix="/events", tags=["events"])
 app.include_router(session_router)  # Session lifecycle stats
+app.include_router(debug_router)  # Debug endpoints
 
 
 @app.get("/")
