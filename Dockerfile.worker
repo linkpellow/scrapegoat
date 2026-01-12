@@ -18,5 +18,16 @@ COPY . .
 ENV PYTHONUNBUFFERED=1
 ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 
-# Run Celery worker
-CMD celery -A app.celery_app worker --loglevel=info --concurrency=2 --pool=solo
+# Create startup script to handle DB URL conversion
+RUN echo '#!/bin/bash\n\
+set -e\n\
+# Convert PostgreSQL URL format if needed\n\
+if [ ! -z "$APP_DATABASE_URL" ]; then\n\
+  export APP_DATABASE_URL=$(echo $APP_DATABASE_URL | sed "s|^postgresql://|postgresql+psycopg://|")\n\
+fi\n\
+# Start Celery worker\n\
+exec celery -A app.celery_app worker --loglevel=info --concurrency=2 --pool=solo\n\
+' > /start.sh && chmod +x /start.sh
+
+# Run startup script
+CMD ["/bin/bash", "/start.sh"]
