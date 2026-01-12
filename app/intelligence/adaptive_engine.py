@@ -45,11 +45,15 @@ def extract_domain(url: str) -> str:
 
 def get_domain_stats(db: Session, domain: str, engine: str) -> Optional[DomainStats]:
     """Get historical stats for domain × engine combination."""
-    return (
-        db.query(DomainStats)
-        .filter(DomainStats.domain == domain, DomainStats.engine == engine)
-        .one_or_none()
-    )
+    try:
+        return (
+            db.query(DomainStats)
+            .filter(DomainStats.domain == domain, DomainStats.engine == engine)
+            .one_or_none()
+        )
+    except Exception:
+        # Table doesn't exist - return None
+        return None
 
 
 def record_run_outcome(
@@ -65,8 +69,25 @@ def record_run_outcome(
     
     This is called after each run completes to maintain historical data.
     """
-    domain = extract_domain(url)
-    
+    try:
+        domain = extract_domain(url)
+        
+        # Get or create stats for this domain × engine
+        _record_run_outcome_impl(db, domain, engine, success, records_extracted, escalations)
+    except Exception:
+        # Table doesn't exist or update failed - silently skip
+        pass
+
+
+def _record_run_outcome_impl(
+    db: Session,
+    domain: str,
+    engine: str,
+    success: bool,
+    records_extracted: int,
+    escalations: int
+) -> None:
+    """Internal implementation of record_run_outcome."""
     # Get or create stats for this domain × engine
     stats = get_domain_stats(db, domain, engine)
     if not stats:

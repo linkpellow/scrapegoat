@@ -429,9 +429,12 @@ def execute_run(self: Task, run_id: str) -> None:
                         db.add(Record(run_id=run.id, data=it))
                         inserted += 1
                     
-                    # Store attempt log
-                    run.engine_attempts = escalation.get_attempts_log()
-                    db.commit()
+                    # Store attempt log (skip if column doesn't exist)
+                    try:
+                        run.engine_attempts = escalation.get_attempts_log()
+                        db.commit()
+                    except Exception:
+                        db.rollback()
                     
                     stats = {
                         "records_inserted": inserted,
