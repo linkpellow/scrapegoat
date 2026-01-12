@@ -15,6 +15,9 @@ class Settings(BaseSettings):
     default_max_attempts: int = 3
     http_timeout_seconds: int = 20
     browser_nav_timeout_ms: int = 30000
+    
+    # External providers
+    scrapingbee_api_key: str = ""
 
 
 settings = Settings()

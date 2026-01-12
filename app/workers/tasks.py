@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import tempfile
 from typing import Any, Dict, List, Optional
@@ -56,6 +57,8 @@ from app.services.block_classifier import BlockClassifier
 from app.services.session_manager import SessionManager
 from app.models.domain_config import DomainConfig
 from app.services.orchestrator import pause_run_for_intervention
+
+logger = logging.getLogger(__name__)
 
 
 def _db() -> Session:
@@ -666,9 +669,14 @@ def _execute_with_engine(
         return items, "", 200
     
     elif engine == "provider":
-        # Provider (Zyte/ScrapingBee) - placeholder for now
-        # In production, integrate with actual provider API
-        raise NotImplementedError("Provider integration not yet implemented")
+        # Provider (ScrapingBee) - handles JS rendering and anti-bot bypassing
+        items = _extract_with_scrapingbee(
+            url=job.target_url,
+            field_map=field_map,
+            crawl_mode=job.crawl_mode,
+            list_config=job.list_config or {}
+        )
+        return items, "", 200
     
     else:
         raise ValueError(f"Unknown engine: {engine}")
@@ -691,3 +699,143 @@ def _extract_with_playwright_stable(
         return _scrapy_extract(url, field_map, crawl_mode, list_config or {})
     else:
         return extract_with_playwright(url, field_map, session_data, browser_profile)
+
+
+def _extract_with_scrapingbee(
+    url: str,
+    field_map: Dict[str, Any],
+    crawl_mode: str = "single",
+    list_config: Dict[str, Any] = None
+) -> List[Dict[str, Any]]:
+    """
+    Extract data using ScrapingBee API for JS rendering and anti-bot bypassing.
+    
+    Supports both single-page and list crawling modes.
+    """
+    from app.config import settings
+    from app.scraping.extraction import extract_from_html_css
+    from urllib.parse import urljoin
+    
+    if not settings.scrapingbee_api_key:
+        raise ValueError("ScrapingBee API key not configured")
+    
+    scrapingbee_url = "https://app.scrapingbee.com/api/v1/"
+    
+    def _extract_fields(html: str) -> Dict[str, Any]:
+        """Extract all fields from HTML using field_map"""
+        item = {}
+        for field_name, spec in field_map.items():
+            value = extract_from_html_css(html, spec)
+            if value is not None:
+                item[field_name] = value
+        return item
+    
+    if crawl_mode == "list":
+        # List mode: extract list items and optionally paginate
+        all_items = []
+        visited_urls = set()
+        current_url = url
+        page_count = 0
+        max_pages = 10  # Safety limit
+        
+        while current_url and page_count < max_pages:
+            if current_url in visited_urls:
+                break
+            
+            visited_urls.add(current_url)
+            page_count += 1
+            
+            # Fetch page via ScrapingBee
+            params = {
+                'api_key': settings.scrapingbee_api_key,
+                'url': current_url,
+                'render_js': 'true',
+                'premium_proxy': 'false',
+                'country_code': 'us'
+            }
+            
+            try:
+                response = httpx.get(scrapingbee_url, params=params, timeout=60.0)
+                response.raise_for_status()
+                html = response.text
+            except Exception as e:
+                logger.error(f"ScrapingBee request failed for {current_url}: {e}")
+                break
+            
+            # For list mode, extract multiple items from the page
+            # First check if we have item_links to follow
+            if list_config and list_config.get("item_links"):
+                # Extract list of item URLs
+                item_links_spec = list_config["item_links"]
+                item_urls = extract_from_html_css(html, item_links_spec)
+                
+                if not isinstance(item_urls, list):
+                    item_urls = [item_urls] if item_urls else []
+                
+                # Fetch and extract each item (limit to avoid too many requests)
+                for item_url in item_urls[:20]:  # Limit to 20 items per page
+                    full_item_url = urljoin(current_url, item_url)
+                    
+                    # Fetch item detail page
+                    item_params = {
+                        'api_key': settings.scrapingbee_api_key,
+                        'url': full_item_url,
+                        'render_js': 'true',
+                        'premium_proxy': 'false',
+                        'country_code': 'us'
+                    }
+                    
+                    try:
+                        item_response = httpx.get(scrapingbee_url, params=item_params, timeout=60.0)
+                        item_response.raise_for_status()
+                        item_html = item_response.text
+                        
+                        # Extract fields from item page
+                        item = _extract_fields(item_html)
+                        if item:
+                            item['_url'] = full_item_url
+                            all_items.append(item)
+                    except Exception as e:
+                        logger.warning(f"Failed to fetch item {full_item_url}: {e}")
+                        continue
+            else:
+                # No item links - extract fields directly from list page
+                item = _extract_fields(html)
+                if item:
+                    item['_url'] = current_url
+                    all_items.append(item)
+            
+            # Find next page link if pagination configured
+            if list_config and list_config.get("pagination"):
+                pagination_spec = list_config["pagination"]
+                next_href = extract_from_html_css(html, pagination_spec)
+                
+                if next_href:
+                    current_url = urljoin(current_url, next_href)
+                else:
+                    current_url = None
+            else:
+                current_url = None
+        
+        return all_items
+    
+    else:
+        # Single page mode
+        params = {
+            'api_key': settings.scrapingbee_api_key,
+            'url': url,
+            'render_js': 'true',
+            'premium_proxy': 'false',
+            'country_code': 'us'
+        }
+        
+        try:
+            response = httpx.get(scrapingbee_url, params=params, timeout=60.0)
+            response.raise_for_status()
+            html = response.text
+        except Exception as e:
+            logger.error(f"ScrapingBee request failed: {e}")
+            raise
+        
+        item = _extract_fields(html)
+        return [item] if item else []
