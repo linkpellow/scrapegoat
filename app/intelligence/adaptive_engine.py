@@ -75,8 +75,11 @@ def record_run_outcome(
         # Get or create stats for this domain × engine
         _record_run_outcome_impl(db, domain, engine, success, records_extracted, escalations)
     except Exception:
-        # Table doesn't exist or update failed - silently skip
-        pass
+        # Table doesn't exist or update failed - rollback and skip
+        try:
+            db.rollback()
+        except:
+            pass
 
 
 def _record_run_outcome_impl(
@@ -105,6 +108,7 @@ def _record_run_outcome_impl(
         cost=cost
     )
     
+    db.flush()  # Flush to catch errors before commit
     db.commit()
 
 
