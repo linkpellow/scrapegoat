@@ -176,7 +176,12 @@ def _extract_with_playwright_internal(
                 # DataDome fingerprinting mitigation
                 "--disable-features=IsolateOrigins,site-per-process",
                 "--disable-site-isolation-trials",
-            ]
+                # Additional container stability flags
+                "--disable-gpu",
+                "--single-process",
+                "--no-zygote",
+            ],
+            timeout=60000  # 60 second browser launch timeout
         )
         
         # Build context options with browser profile (DataDome-aware)
