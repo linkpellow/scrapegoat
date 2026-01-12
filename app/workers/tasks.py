@@ -248,8 +248,10 @@ def execute_run(self: Task, run_id: str) -> None:
         
         # PROACTIVE SESSION HEALTH PROBE (before execution)
         # Skip probe for sites that don't require authentication
+        logger.info(f"Run {run_id}: Extracting domain from URL")
         session_data = None
         domain = extract_domain(job.target_url)
+        logger.info(f"Run {run_id}: Domain={domain}, requires_auth={job.requires_auth}")
         
         if job.requires_auth:
             # Probe session health BEFORE starting execution (only for auth-required sites)
@@ -284,6 +286,7 @@ def execute_run(self: Task, run_id: str) -> None:
                 session_data = session_vault.session_data
 
         # PROVIDER ROUTING: Check if we should skip direct attempts
+        logger.info(f"Run {run_id}: Calling ProviderRouter.should_skip_direct_attempts")
         from app.services.provider_router import ProviderRouter
         
         should_skip = ProviderRouter.should_skip_direct_attempts(
@@ -291,6 +294,7 @@ def execute_run(self: Task, run_id: str) -> None:
             domain=domain,
             has_session=(session_data is not None)
         )
+        logger.info(f"Run {run_id}: should_skip={should_skip}")
         
         if should_skip:
             # Domain requires provider - skip escalation
@@ -307,7 +311,9 @@ def execute_run(self: Task, run_id: str) -> None:
             engine_mode = getattr(job, 'engine_mode', 'auto')
         
         # Initialize auto-escalation engine
+        logger.info(f"Run {run_id}: Initializing AutoEscalationEngine with mode={engine_mode}")
         escalation = AutoEscalationEngine(engine_mode=engine_mode)
+        logger.info(f"Run {run_id}: AutoEscalationEngine initialized")
         
         # Get browser profile (generate if not exists)
         browser_profile = getattr(job, 'browser_profile', None) or {}
