@@ -753,10 +753,14 @@ def _execute_with_engine(
         return items, "", 200
     
         elif engine == "provider":
-            # Provider (ScrapingBee) - DISABLED: CloudFlare blocks it
-            # Fall through to let escalation try playwright instead
-            logger.warning("Provider engine requested but disabled - returning empty to trigger escalation")
-            return [], "", 403
+            # Provider (ScrapingBee) - handles JS rendering and anti-bot bypassing
+            items = _extract_with_scrapingbee(
+                url=job.target_url,
+                field_map=field_map,
+                crawl_mode=job.crawl_mode,
+                list_config=job.list_config or {}
+            )
+            return items, "", 200
     
     else:
         raise ValueError(f"Unknown engine: {engine}")
@@ -921,17 +925,42 @@ def _extract_with_scrapingbee(
         
         try:
             response = httpx.get(scrapingbee_url, params=params, timeout=60.0)
+            
+            # SIMPLE DETECTION: Check for CloudFlare blocks
             if response.status_code >= 400:
                 logger.error(f"ScrapingBee error {response.status_code}: {response.text[:500]}")
-                # Try to get error details from response
+                
+                # Check if it's a CloudFlare block
+                body = response.text.lower()
+                is_cf_block = any(marker in body for marker in [
+                    "cloudflare",
+                    "cf-browser-verification",
+                    "checking your browser",
+                    "security challenge",
+                    "captcha"
+                ])
+                
+                if is_cf_block:
+                    logger.warning("⚠️ CloudFlare block detected - returning empty to trigger escalation")
+                    return []  # Let escalation try Playwright
+                
+                # Log error details
                 try:
                     error_data = response.json()
                     logger.error(f"ScrapingBee error details: {error_data}")
                 except:
                     pass
+            
             response.raise_for_status()
             html = response.text
-            logger.info(f"ScrapingBee success: received {len(html)} bytes")
+            
+            # SIMPLE DETECTION: Check if response is actually blocked
+            if len(html) < 5000 and any(marker in html.lower() for marker in ["cloudflare", "challenge"]):
+                logger.warning("⚠️ Response appears to be CloudFlare challenge page - returning empty")
+                return []
+            
+            logger.info(f"✅ ScrapingBee success: received {len(html)} bytes")
+            
         except Exception as e:
             logger.error(f"ScrapingBee request failed: {e}")
             raise
