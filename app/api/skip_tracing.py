@@ -451,3 +451,70 @@ def get_person_details(peo_id: str):
 def health_check():
     """Health check endpoint"""
     return {"status": "healthy", "service": "skip_tracing_adapter"}
+
+
+@router.post("/search/by-name-sync", response_model=SkipTracingResponse)
+def search_by_name_sync(
+    name: str = Query(..., description="Full name to search"),
+    city: str = Query(None, description="City (optional)"),
+    state: str = Query(None, description="State code (e.g. MI, FL)"),
+    page: int = Query(1, ge=1, description="Page number")
+):
+    """
+    SYNCHRONOUS search by name - for testing without Celery worker.
+    
+    WARNING: This endpoint bypasses Celery and runs scraping synchronously.
+    Use only for testing. Production should use async /search/by-name endpoint.
+    """
+    from app.services.people_search_adapter import PeopleSearchAdapter
+    from app.people_search_sites import FAST_PEOPLE_SEARCH
+    import os
+    
+    # Build search params
+    search_params = {"name": name, "page": str(page)}
+    if city:
+        search_params["city"] = city
+    if state:
+        search_params["state"] = state
+    
+    # Get ScrapingBee API key
+    api_key = os.getenv("APP_SCRAPINGBEE_API_KEY")
+    if not api_key:
+        raise HTTPException(status_code=500, detail="ScrapingBee API key not configured")
+    
+    try:
+        # Use FastPeopleSearch directly
+        adapter = PeopleSearchAdapter(
+            site_config=FAST_PEOPLE_SEARCH,
+            api_key=api_key
+        )
+        
+        # Execute search synchronously
+        logger.info(f"Executing sync search for: {search_params}")
+        result = adapter.search_by_name(search_params)
+        
+        if not result or "error" in result:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Search failed: {result.get('error', 'No results')}"
+            )
+        
+        # Parse results
+        records = result.get("records", [])
+        parsed = PeopleSearchAdapter.parse_search_results(records, "fastpeoplesearch")
+        people = _map_to_person_details(parsed)
+        
+        return SkipTracingResponse(
+            success=True,
+            data={
+                "PeopleDetails": [p.dict(by_alias=True) for p in people],
+                "Status": 200,
+                "_source": "fastpeoplesearch",
+                "_mode": "synchronous",
+                "_records_found": len(people)
+            }
+        )
+    
+    except Exception as e:
+        logger.error(f"Sync search failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
