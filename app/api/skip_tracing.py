@@ -256,23 +256,33 @@ def _map_to_person_details(records: List[Dict[str, Any]]) -> List[PersonDetails]
 @router.post("/search/by-name", response_model=SkipTracingResponse)
 def search_by_name(
     name: str = Query(..., description="Full name to search"),
+    city: str = Query(None, description="City (optional)"),
+    state: str = Query(None, description="State code (e.g. MI, FL)"),
     page: int = Query(1, ge=1, description="Page number")
 ):
     """
-    Search by name.
+    Search by name with optional location.
     
     Priority: HIGH - Most common search method.
     
     Uses FastPeopleSearch (primary) with TruePeopleSearch fallback.
     
-    Example: name="John Smith", page=1
+    Example: name="John Smith", city="Denver", state="CO", page=1
     """
-    logger.info(f"[ENDPOINT] search_by_name called: name={name}, page={page}")
+    logger.info(f"[ENDPOINT] search_by_name called: name={name}, city={city}, state={state}, page={page}")
+    
+    # Build search params
+    search_params = {"name": name, "page": str(page)}
+    if city:
+        search_params["city"] = city
+    if state:
+        search_params["state"] = state
+    
     # Execute with fallback
-    logger.info(f"[ENDPOINT] Calling _execute_with_fallback")
+    logger.info(f"[ENDPOINT] Calling _execute_with_fallback with params: {search_params}")
     records, site_used = _execute_with_fallback(
         search_type="search_by_name",
-        search_params={"name": name, "page": str(page)},
+        search_params=search_params,
         timeout=60
     )
     logger.info(f"[ENDPOINT] _execute_with_fallback returned {len(records)} records from {site_used}")
