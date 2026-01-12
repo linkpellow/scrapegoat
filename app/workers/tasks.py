@@ -225,6 +225,7 @@ def execute_run(self: Task, run_id: str) -> None:
             db.commit()
             return
 
+        logger.info(f"Starting run {run_id} for job {run.job_id} - URL: {job.target_url}")
         start_run(db, run)
         db.commit()
         
@@ -246,39 +247,41 @@ def execute_run(self: Task, run_id: str) -> None:
         )
         
         # PROACTIVE SESSION HEALTH PROBE (before execution)
+        # Skip probe for sites that don't require authentication
         session_data = None
         domain = extract_domain(job.target_url)
         
-        # Probe session health BEFORE starting execution
-        from app.services.session_probe import SessionProbe
-        import asyncio
-        
-        is_healthy, intervention_id = asyncio.run(
-            SessionProbe.probe_before_run(
-                db=db,
-                domain=domain,
-                job_id=str(job.id),
-                run_id=str(run.id)
-            )
-        )
-        
-        if not is_healthy:
-            # Session probe failed - intervention already created
-            emit_intervention_created(
-                intervention_id,
-                "login_refresh",
-                "Session invalid (proactive probe)",
-                "normal"
+        if job.requires_auth:
+            # Probe session health BEFORE starting execution (only for auth-required sites)
+            from app.services.session_probe import SessionProbe
+            import asyncio
+            
+            is_healthy, intervention_id = asyncio.run(
+                SessionProbe.probe_before_run(
+                    db=db,
+                    domain=domain,
+                    job_id=str(job.id),
+                    run_id=str(run.id)
+                )
             )
             
-            pause_run_for_intervention(db, run, "Session invalid", intervention_id)
-            db.commit()
-            return
-        
-        # Load session if available (already validated by probe)
-        session_vault = SessionManager.get_valid_session(db, domain)
-        if session_vault:
-            session_data = session_vault.session_data
+            if not is_healthy:
+                # Session probe failed - intervention already created
+                emit_intervention_created(
+                    intervention_id,
+                    "login_refresh",
+                    "Session invalid (proactive probe)",
+                    "normal"
+                )
+                
+                pause_run_for_intervention(db, run, "Session invalid", intervention_id)
+                db.commit()
+                return
+            
+            # Load session if available (already validated by probe)
+            session_vault = SessionManager.get_valid_session(db, domain)
+            if session_vault:
+                session_data = session_vault.session_data
 
         # PROVIDER ROUTING: Check if we should skip direct attempts
         from app.services.provider_router import ProviderRouter
@@ -340,8 +343,11 @@ def execute_run(self: Task, run_id: str) -> None:
         max_escalations = 3
         escalation_count = 0
         
+        logger.info(f"Run {run_id}: Starting escalation loop with engine={current_engine}, mode={engine_mode}")
+        
         while escalation_count < max_escalations:
             try:
+                logger.info(f"Run {run_id}: Executing with engine={current_engine}, attempt={escalation_count+1}/{max_escalations}")
                 # Execute with current engine
                 items, html, status_code = _execute_with_engine(
                     engine=current_engine,
@@ -350,6 +356,7 @@ def execute_run(self: Task, run_id: str) -> None:
                     session_data=session_data,
                     browser_profile=browser_profile
                 )
+                logger.info(f"Run {run_id}: Engine {current_engine} returned {len(items) if items else 0} items, status={status_code}")
                 
                 # Check if we got results
                 if items:
@@ -716,9 +723,13 @@ def _extract_with_scrapingbee(
     from app.scraping.extraction import extract_from_html_css
     from urllib.parse import urljoin
     
+    logger.info(f"ScrapingBee: Starting extraction for {url}, mode={crawl_mode}")
+    
     if not settings.scrapingbee_api_key:
+        logger.error("ScrapingBee API key not configured!")
         raise ValueError("ScrapingBee API key not configured")
     
+    logger.info(f"ScrapingBee: API key configured (length={len(settings.scrapingbee_api_key)})")
     scrapingbee_url = "https://app.scrapingbee.com/api/v1/"
     
     def _extract_fields(html: str) -> Dict[str, Any]:
