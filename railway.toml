@@ -2,7 +2,7 @@
 builder = "NIXPACKS"
 
 [deploy]
-startCommand = "echo '=== ENVIRONMENT DIAGNOSTICS ===' && echo 'DATABASE_URL exists:' && echo $DATABASE_URL | head -c 50 && echo '...' && echo 'REDIS_URL exists:' && echo $REDIS_URL | head -c 50 && echo '...' && echo 'APP_DATABASE_URL exists:' && echo $APP_DATABASE_URL | head -c 50 && echo '...' && echo 'APP_REDIS_URL exists:' && echo $APP_REDIS_URL | head -c 50 && echo '...' && echo '=== STARTING APP ===' && alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port $PORT"
+startCommand = "export APP_DATABASE_URL=$(echo $APP_DATABASE_URL | sed 's|^postgresql://|postgresql+psycopg://|') && export APP_CELERY_BROKER_URL=$APP_REDIS_URL && export APP_CELERY_RESULT_BACKEND=$APP_REDIS_URL && echo '=== Starting with DB: ' && echo $APP_DATABASE_URL | head -c 60 && echo '...' && alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port $PORT"
 healthcheckPath = "/skip-tracing/health"
 healthcheckTimeout = 300
 restartPolicyType = "ON_FAILURE"
