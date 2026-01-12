@@ -1,0 +1,22 @@
+# Dockerfile for Celery Worker with Playwright support
+FROM mcr.microsoft.com/playwright/python:v1.50.0-noble
+
+# Set working directory
+WORKDIR /app
+
+# Install Python dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy application code
+COPY . .
+
+# Playwright browsers are pre-installed in this image
+# No need to run `playwright install`
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+
+# Run Celery worker
+CMD celery -A app.celery_app worker --loglevel=info --concurrency=2 --pool=solo
