@@ -432,9 +432,10 @@ def execute_run(self: Task, run_id: str) -> None:
                     # Store attempt log (skip if column doesn't exist)
                     try:
                         run.engine_attempts = escalation.get_attempts_log()
-                        db.commit()
+                        db.flush()
                     except Exception:
                         db.rollback()
+                        # Continue anyway - this is just optimization data
                     
                     stats = {
                         "records_inserted": inserted,
@@ -446,18 +447,22 @@ def execute_run(self: Task, run_id: str) -> None:
                         "bias_reason": bias_reason,
                     }
                     complete_run(db, run, stats)
-                    
-                    # ADAPTIVE INTELLIGENCE: Record successful outcome
-                    record_run_outcome(
-                        db=db,
-                        url=job.target_url,
-                        engine=current_engine,
-                        success=True,
-                        records_extracted=inserted,
-                        escalations=escalation_count
-                    )
-                    
                     db.commit()
+                    
+                    # ADAPTIVE INTELLIGENCE: Record successful outcome (separate transaction)
+                    try:
+                        record_run_outcome(
+                            db=db,
+                            url=job.target_url,
+                            engine=current_engine,
+                            success=True,
+                            records_extracted=inserted,
+                            escalations=escalation_count
+                        )
+                    except Exception:
+                        # Stats recording failed - log but don't crash
+                        pass
+                    
                     return
                 
                 # No items extracted - check if we should escalate
@@ -608,8 +613,11 @@ def execute_run(self: Task, run_id: str) -> None:
                     escalation_count += 1
                 else:
                     # No more escalation - fail
-                    run.engine_attempts = escalation.get_attempts_log()
-                    db.commit()
+                    try:
+                        run.engine_attempts = escalation.get_attempts_log()
+                        db.flush()
+                    except Exception:
+                        db.rollback()
                     
                     failure = classify_exception(e)
                     
@@ -640,8 +648,12 @@ def execute_run(self: Task, run_id: str) -> None:
                     return
         
         # Max escalations reached
-        run.engine_attempts = escalation.get_attempts_log()
-        db.commit()
+        try:
+            run.engine_attempts = escalation.get_attempts_log()
+            db.flush()
+        except Exception:
+            db.rollback()
+        
         fail_run(db, run, "max_escalations", "Reached maximum escalation attempts")
         db.commit()
 
