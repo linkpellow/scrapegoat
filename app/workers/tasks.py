@@ -315,12 +315,17 @@ def execute_run(self: Task, run_id: str) -> None:
         escalation = AutoEscalationEngine(engine_mode=engine_mode)
         logger.info(f"Run {run_id}: AutoEscalationEngine initialized")
         
-        # Get browser profile (generate if not exists)
+        # Get browser profile (generate if not exists) - only for Playwright
         browser_profile = getattr(job, 'browser_profile', None) or {}
-        if not browser_profile:
+        if not browser_profile and current_engine != "provider":
             browser_profile = generate_browser_profile()
-            job.browser_profile = browser_profile
-            db.commit()
+            try:
+                job.browser_profile = browser_profile
+                db.commit()
+            except Exception:
+                # Column might not exist - continue without profile
+                db.rollback()
+                browser_profile = generate_browser_profile()
 
         # Determine initial engine (already set by provider routing if needed)
         if initial_strategy == ExecutionStrategy.API_REPLAY:
