@@ -315,18 +315,6 @@ def execute_run(self: Task, run_id: str) -> None:
         escalation = AutoEscalationEngine(engine_mode=engine_mode)
         logger.info(f"Run {run_id}: AutoEscalationEngine initialized")
         
-        # Get browser profile (generate if not exists) - only for Playwright
-        browser_profile = getattr(job, 'browser_profile', None) or {}
-        if not browser_profile and current_engine != "provider":
-            browser_profile = generate_browser_profile()
-            try:
-                job.browser_profile = browser_profile
-                db.commit()
-            except Exception:
-                # Column might not exist - continue without profile
-                db.rollback()
-                browser_profile = generate_browser_profile()
-
         # Determine initial engine (already set by provider routing if needed)
         if initial_strategy == ExecutionStrategy.API_REPLAY:
             current_engine = "provider"
@@ -339,6 +327,21 @@ def execute_run(self: Task, run_id: str) -> None:
             )
             if adaptive_bias:
                 bias_reason = adaptive_bias
+        
+        # Get browser profile (generate if not exists) - only for Playwright, not provider
+        browser_profile = getattr(job, 'browser_profile', None) or {}
+        if not browser_profile and current_engine == "playwright":
+            browser_profile = generate_browser_profile()
+            try:
+                job.browser_profile = browser_profile
+                db.commit()
+            except Exception:
+                # Column might not exist - continue without profile
+                db.rollback()
+                browser_profile = generate_browser_profile()
+        elif not browser_profile:
+            # Generate profile but don't save to DB
+            browser_profile = generate_browser_profile()
         
         # Log bias decision if applied
         if bias_reason:
