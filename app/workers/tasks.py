@@ -636,12 +636,15 @@ def execute_run(self: Task, run_id: str) -> None:
 
     except Exception as e:
         # Top-level error
+        logger.error(f"Run {run_id}: TOP-LEVEL EXCEPTION: {type(e).__name__}: {str(e)}")
+        import traceback
+        logger.error(f"Run {run_id}: Traceback:\n{traceback.format_exc()}")
         try:
             failure = classify_exception(e)
             fail_run(db, run, failure.code.value, failure.message)
             db.commit()
-        except:
-            pass
+        except Exception as e2:
+            logger.error(f"Run {run_id}: Failed to classify/fail run: {e2}")
     finally:
         db.close()
 
