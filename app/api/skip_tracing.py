@@ -463,13 +463,9 @@ def search_by_name_sync(
     """
     SYNCHRONOUS search by name - for testing without Celery worker.
     
-    WARNING: This endpoint bypasses Celery and runs scraping synchronously.
-    Use only for testing. Production should use async /search/by-name endpoint.
+    WARNING: This endpoint uses the normal workflow but waits synchronously.
+    Requires Celery worker to be running. Use this to test the full pipeline.
     """
-    from app.services.people_search_adapter import PeopleSearchAdapter
-    from app.people_search_sites import FAST_PEOPLE_SEARCH
-    import os
-    
     # Build search params
     search_params = {"name": name, "page": str(page)}
     if city:
@@ -477,31 +473,16 @@ def search_by_name_sync(
     if state:
         search_params["state"] = state
     
-    # Get ScrapingBee API key
-    api_key = os.getenv("APP_SCRAPINGBEE_API_KEY")
-    if not api_key:
-        raise HTTPException(status_code=500, detail="ScrapingBee API key not configured")
-    
+    # Use existing architecture with increased timeout
     try:
-        # Use FastPeopleSearch directly
-        adapter = PeopleSearchAdapter(
-            site_config=FAST_PEOPLE_SEARCH,
-            api_key=api_key
+        records, site_used = _execute_with_fallback(
+            search_type="search_by_name",
+            search_params=search_params,
+            timeout=120  # 2 minutes for testing
         )
         
-        # Execute search synchronously
-        logger.info(f"Executing sync search for: {search_params}")
-        result = adapter.search_by_name(search_params)
-        
-        if not result or "error" in result:
-            raise HTTPException(
-                status_code=404,
-                detail=f"Search failed: {result.get('error', 'No results')}"
-            )
-        
         # Parse results
-        records = result.get("records", [])
-        parsed = PeopleSearchAdapter.parse_search_results(records, "fastpeoplesearch")
+        parsed = PeopleSearchAdapter.parse_search_results(records, site_used)
         people = _map_to_person_details(parsed)
         
         return SkipTracingResponse(
@@ -509,12 +490,14 @@ def search_by_name_sync(
             data={
                 "PeopleDetails": [p.dict(by_alias=True) for p in people],
                 "Status": 200,
-                "_source": "fastpeoplesearch",
-                "_mode": "synchronous",
+                "_source": site_used,
+                "_mode": "synchronous_with_celery",
                 "_records_found": len(people)
             }
         )
     
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Sync search failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
