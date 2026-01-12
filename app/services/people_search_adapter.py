@@ -68,15 +68,21 @@ class PeopleSearchAdapter:
         
         # Create field mappings
         for field_name, field_config in search_config["fields"].items():
+            selector_spec = {
+                "css": field_config.get("css", ""),
+                "attr": field_config.get("attr"),
+                "all": field_config.get("all", False)
+            }
+            
+            # Add regex if present
+            if field_config.get("regex"):
+                selector_spec["regex"] = field_config.get("regex")
+            
             field_map = FieldMap(
                 id=uuid.uuid4(),
                 job_id=job.id,
                 field_name=field_name,
-                selector_spec={
-                    "css": field_config.get("css", ""),
-                    "attr": field_config.get("attr"),
-                    "all": field_config.get("all", False)
-                },
+                selector_spec=selector_spec,
                 field_type=field_config.get("field_type", "string"),
                 smart_config=field_config.get("smart_config", {}),
                 validation_rules=field_config.get("validation_rules", {})
@@ -92,10 +98,28 @@ class PeopleSearchAdapter:
         """Build URL from template and parameters"""
         url = template
         
+        # Helper to convert state code to full name
+        state_names = {
+            "AL": "alabama", "AK": "alaska", "AZ": "arizona", "AR": "arkansas",
+            "CA": "california", "CO": "colorado", "CT": "connecticut", "DE": "delaware",
+            "FL": "florida", "GA": "georgia", "HI": "hawaii", "ID": "idaho",
+            "IL": "illinois", "IN": "indiana", "IA": "iowa", "KS": "kansas",
+            "KY": "kentucky", "LA": "louisiana", "ME": "maine", "MD": "maryland",
+            "MA": "massachusetts", "MI": "michigan", "MN": "minnesota", "MS": "mississippi",
+            "MO": "missouri", "MT": "montana", "NE": "nebraska", "NV": "nevada",
+            "NH": "new-hampshire", "NJ": "new-jersey", "NM": "new-mexico", "NY": "new-york",
+            "NC": "north-carolina", "ND": "north-dakota", "OH": "ohio", "OK": "oklahoma",
+            "OR": "oregon", "PA": "pennsylvania", "RI": "rhode-island", "SC": "south-carolina",
+            "SD": "south-dakota", "TN": "tennessee", "TX": "texas", "UT": "utah",
+            "VT": "vermont", "VA": "virginia", "WA": "washington", "WV": "west-virginia",
+            "WI": "wisconsin", "WY": "wyoming", "DC": "district-of-columbia"
+        }
+        
+        # Process all variants of each parameter
         for key, value in params.items():
+            # Standard lowercase with dashes
             placeholder = "{" + key + "}"
             if placeholder in url:
-                # URL-encode and format value
                 if key == "name":
                     # "John Smith" -> "john-smith"
                     formatted = value.lower().replace(" ", "-")
@@ -108,12 +132,24 @@ class PeopleSearchAdapter:
                     formatted = value.lower().replace(" ", "-")
                     formatted = re.sub(r'[^a-z0-9-]', '', formatted)
                 elif key == "location":
-                    # "Denver, CO 80201" -> leave as-is or URL encode
+                    # "Denver, CO 80201" -> leave as-is
                     formatted = value
                 else:
                     formatted = value
                 
                 url = url.replace(placeholder, formatted)
+            
+            # State uppercase variant (for ThatsThem)
+            placeholder_upper = "{" + key + "_upper}"
+            if placeholder_upper in url and key == "state":
+                formatted = value.upper()
+                url = url.replace(placeholder_upper, formatted)
+            
+            # State full name variant (for ZabaSearch)
+            placeholder_full = "{" + key + "_full}"
+            if placeholder_full in url and key == "state":
+                formatted = state_names.get(value.upper(), value.lower())
+                url = url.replace(placeholder_full, formatted)
         
         return url
     

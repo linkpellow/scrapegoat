@@ -2,9 +2,11 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 from playwright.sync_api import sync_playwright
+from urllib.parse import urlparse
 import logging
 
 from app.config import settings
+from app.scraping.session_manager import get_session_manager
 
 logger = logging.getLogger(__name__)
 
@@ -82,19 +84,86 @@ def extract_with_playwright(
     url: str,
     field_map: Dict[str, Dict[str, Any]],
     session_data: Optional[Dict[str, Any]] = None,
-    browser_profile: Optional[Dict[str, Any]] = None
+    browser_profile: Optional[Dict[str, Any]] = None,
+    proxy_identity: Optional[str] = None
 ) -> List[Dict[str, Any]]:
     """
     Loads the page via Playwright, then extracts fields using CSS selectors in-page.
     Returns a list of 1 record for single/detail mode.
     List-page crawling is handled by spider/worker orchestration.
     
+    Session Lifecycle:
+    - Attempts to reuse existing trusted session for the site
+    - Creates new session if none exists or trust is low
+    - Tracks success/failure to maintain session health
+    
     Args:
         url: Target URL to scrape
         field_map: Field selector specifications
-        session_data: Optional session cookies/storage for authenticated scraping
+        session_data: Optional session cookies/storage for authenticated scraping (legacy)
         browser_profile: Optional browser fingerprint profile for stable headers
+        proxy_identity: Optional proxy identifier for session keying
     """
+    # Extract site domain for session management
+    parsed = urlparse(url)
+    site_domain = parsed.netloc
+    
+    # Get session manager
+    session_mgr = get_session_manager()
+    
+    # Try to reuse existing session
+    existing_session = session_mgr.get_session(site_domain, proxy_identity)
+    if existing_session:
+        # Use existing session cookies/storage
+        session_data = {
+            "cookies": existing_session.cookies,
+            "storage_state": existing_session.storage_state
+        }
+        logger.info(f"♻️ Using existing session for {site_domain}")
+    
+    extraction_successful = False
+    new_cookies = []
+    new_storage_state = None
+    
+    try:
+        result = _extract_with_playwright_internal(
+            url, field_map, session_data, browser_profile, 
+            site_domain, existing_session is not None
+        )
+        extraction_successful = True
+        return result
+    except Exception as e:
+        extraction_successful = False
+        raise
+    finally:
+        # Update session lifecycle based on result
+        if extraction_successful:
+            # Mark success if we reused a session
+            if existing_session:
+                session_mgr.mark_success(site_domain, proxy_identity)
+            # Note: New session creation happens in _extract_with_playwright_internal
+        else:
+            # Mark failure if we reused a session
+            if existing_session:
+                session_mgr.mark_failure(site_domain, proxy_identity)
+
+
+def _extract_with_playwright_internal(
+    url: str,
+    field_map: Dict[str, Dict[str, Any]],
+    session_data: Optional[Dict[str, Any]],
+    browser_profile: Optional[Dict[str, Any]],
+    site_domain: str,
+    is_reused_session: bool
+) -> List[Dict[str, Any]]:
+    """
+    Internal Playwright extraction with session capture.
+    
+    Separated from extract_with_playwright to properly handle session lifecycle
+    in finally block.
+    """
+    session_mgr = get_session_manager()
+    
     with sync_playwright() as p:
         # DataDome-aware configuration (NOT Cloudflare)
         browser = p.chromium.launch(
@@ -170,14 +239,38 @@ def extract_with_playwright(
                     originalQuery(parameters)
             );
             
-            // Plugin array
+            // Plugin array with realistic plugins
             Object.defineProperty(navigator, 'plugins', {
-                get: () => [1, 2, 3, 4, 5]
+                get: () => [
+                    {name: 'Chrome PDF Plugin', filename: 'internal-pdf-viewer'},
+                    {name: 'Chrome PDF Viewer', filename: 'mhjfbmdgcfjbbpaeojofohoefgiehjai'},
+                    {name: 'Native Client', filename: 'internal-nacl-plugin'}
+                ]
             });
             
             // Languages
             Object.defineProperty(navigator, 'languages', {
                 get: () => ['en-US', 'en']
+            });
+            
+            // Hardware concurrency
+            Object.defineProperty(navigator, 'hardwareConcurrency', {
+                get: () => 8
+            });
+            
+            // Device memory
+            Object.defineProperty(navigator, 'deviceMemory', {
+                get: () => 8
+            });
+            
+            // Connection
+            Object.defineProperty(navigator, 'connection', {
+                get: () => ({
+                    effectiveType: '4g',
+                    rtt: 100,
+                    downlink: 10,
+                    saveData: false
+                })
             });
         """)
         
@@ -186,7 +279,8 @@ def extract_with_playwright(
 
         # DataDome timing: add realistic delay before navigation
         import time
-        time.sleep(0.5)  # 500ms delay simulates human behavior
+        import random
+        time.sleep(random.uniform(0.3, 0.8))  # Random 300-800ms delay simulates human behavior
         
         resp = page.goto(url, wait_until="networkidle")  # Wait for full page load
         status = resp.status if resp else 0
@@ -195,11 +289,81 @@ def extract_with_playwright(
         if status in (401, 403, 429):
             raise RuntimeError(f"blocked:Blocked (HTTP {status})")
 
+        # Simulate human-like behavior: random small mouse movements and scrolling
+        try:
+            # Move mouse to random positions (simulates human looking at content)
+            page.mouse.move(random.randint(100, 400), random.randint(100, 300))
+            time.sleep(random.uniform(0.1, 0.3))
+            
+            # Small scroll down (humans often scroll a bit)
+            page.evaluate("window.scrollBy(0, 100)")
+            time.sleep(random.uniform(0.2, 0.5))
+        except Exception:
+            pass  # Not critical if this fails
+
+        # Handle common modal checkboxes (ThatsThem, ZabaSearch FCRA agreements)
+        try:
+            # Wait a bit for modals to appear
+            time.sleep(random.uniform(0.5, 1.0))
+            
+            # Try to click "I Agree" style buttons/checkboxes
+            agree_selectors = [
+                "#checkbox",  # ZabaSearch checkbox
+                "div.verify",  # ZabaSearch verify button
+                "button:has-text('I Agree')",
+                "button:has-text('I AGREE')",
+                "button:has-text('Accept')",
+                "input[type='checkbox'][id*='agree']",
+                "input[type='checkbox'][id*='consent']",
+            ]
+            
+            for selector in agree_selectors:
+                try:
+                    element = page.locator(selector).first
+                    if element.is_visible(timeout=2000):
+                        logger.info(f"✅ Found agreement element: {selector}, clicking...")
+                        # Move mouse to element first (more human-like)
+                        box = element.bounding_box()
+                        if box:
+                            page.mouse.move(
+                                box['x'] + box['width'] / 2,
+                                box['y'] + box['height'] / 2
+                            )
+                            time.sleep(random.uniform(0.1, 0.3))
+                        element.click(timeout=2000)
+                        time.sleep(random.uniform(0.5, 1.0))  # Human-like delay after click
+                        # Wait for page to update after modal dismissal
+                        page.wait_for_load_state("networkidle", timeout=5000)
+                        break
+                except Exception:
+                    continue  # Try next selector
+        except Exception as e:
+            logger.debug(f"No modal found or already dismissed: {e}")
+
         # CRITICAL: Check for JSON-LD structured data (FastPeopleSearch, etc.)
         html = page.content()
         jsonld_data = _extract_jsonld_if_present(html, url)
         if jsonld_data:
             # JSON-LD found - use structured data instead of CSS selectors
+            
+            # Capture session state before closing (if this was a new session)
+            if not is_reused_session:
+                try:
+                    captured_cookies = ctx.cookies()
+                    captured_storage = ctx.storage_state()
+                    
+                    session_mgr.create_session(
+                        site_domain=site_domain,
+                        cookies=captured_cookies,
+                        storage_state=captured_storage,
+                        proxy_identity=None,
+                        user_agent=context_options.get("user_agent"),
+                        viewport=context_options.get("viewport")
+                    )
+                    logger.info(f"💾 Captured session state for {site_domain} (JSON-LD path)")
+                except Exception as e:
+                    logger.warning(f"Failed to capture session state: {e}")
+            
             ctx.close()
             browser.close()
             return jsonld_data
@@ -240,6 +404,25 @@ def extract_with_playwright(
                     v = v.strip()
                 record[field_name] = v or None
 
+        # Capture session state for reuse (if this was a new session)
+        if not is_reused_session:
+            try:
+                captured_cookies = ctx.cookies()
+                captured_storage = ctx.storage_state()
+                
+                # Store session for future reuse
+                session_mgr.create_session(
+                    site_domain=site_domain,
+                    cookies=captured_cookies,
+                    storage_state=captured_storage,
+                    proxy_identity=None,  # Will be passed when proxy support added
+                    user_agent=context_options.get("user_agent"),
+                    viewport=context_options.get("viewport")
+                )
+                logger.info(f"💾 Captured session state for {site_domain} (for future reuse)")
+            except Exception as e:
+                logger.warning(f"Failed to capture session state: {e}")
+        
         ctx.close()
         browser.close()
 

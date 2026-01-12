@@ -65,11 +65,15 @@ def _apply_regex(value: Any, regex: Optional[str]) -> Any:
                 continue
             m = pattern.search(str(v))
             if m:
-                out.append(m.group(0))
+                # Use first capture group if exists, otherwise full match
+                out.append(m.group(1) if m.groups() else m.group(0))
         return out
     else:
         m = pattern.search(str(value))
-        return m.group(0) if m else None
+        if m:
+            # Use first capture group if exists, otherwise full match
+            return m.group(1) if m.groups() else m.group(0)
+        return None
 
 
 def extract_from_html_css(html: str, spec: Dict[str, Any]) -> Any:

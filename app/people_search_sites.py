@@ -270,10 +270,308 @@ TRUE_PEOPLE_SEARCH = {
 }
 
 
+# ThatsThem Configuration
+# Based on real HTML structure from thatsthem.com/name/Link-Pellow/Dowagiac-MI
+THATS_THEM = {
+    "name": "ThatsThem",
+    "base_url": "https://thatsthem.com",
+    "free": True,
+    "requires_auth": False,
+    
+    "search_by_name": {
+        "url_template": "https://thatsthem.com/name/{name}/{city}-{state_upper}",
+        "crawl_mode": "single",
+        "engine_mode": "auto",  # Start with HTTP, escalate to Playwright if needed, ScrapingBee as last resort
+        
+        "fields": {
+            "name": {
+                "css": "div.card div.name a.web",
+                "field_type": "person_name"
+            },
+            "age": {
+                "css": "div.card div.age",
+                "regex": r"\((\d+)\s+years? old\)",  # Extract from "Born January 1997 (29 years old)"
+                "field_type": "integer"
+            },
+            "phone": {
+                "css": "div.phone span.number a.web",
+                "all": True,
+                "field_type": "phone",
+                "smart_config": {"country": "US", "format": "E164"}
+            },
+            "city": {
+                "css": "span.address span.city",
+                "field_type": "city"
+            },
+            "state": {
+                "css": "span.address span.state",
+                "field_type": "state"
+            },
+            "zip_code": {
+                "css": "span.address span.zip",
+                "field_type": "zip_code"
+            },
+            "address": {
+                "css": "div.subtitle:contains('Current Address:') ~ div.location span.address a.web",
+                "field_type": "address"
+            },
+            "email": {
+                "css": "div.email span.inbox a.web",
+                "all": True,
+                "field_type": "email"
+            }
+        }
+    },
+    
+    "search_by_phone": {
+        "url_template": "https://thatsthem.com/phone/{phone}",
+        "crawl_mode": "single",
+        "engine_mode": "auto",  # Start with HTTP, escalate to Playwright if needed
+        
+        "fields": {
+            "name": {
+                "css": "div.card div.name a.web",
+                "field_type": "person_name"
+            },
+            "age": {
+                "css": "div.card div.age",
+                "regex": r"\((\d+)\s+years? old\)",
+                "field_type": "integer"
+            },
+            "phone": {
+                "css": "div.phone span.number a.web",
+                "field_type": "phone",
+                "smart_config": {"country": "US", "format": "E164"}
+            },
+            "address": {
+                "css": "div.subtitle:contains('Current Address:') ~ div.location span.address a.web",
+                "field_type": "address"
+            }
+        }
+    }
+}
+
+
+# AnyWho Configuration  
+# Based on web search results from anywho.com
+ANY_WHO = {
+    "name": "AnyWho",
+    "base_url": "https://www.anywho.com",
+    "free": True,
+    "requires_auth": False,
+    
+    "search_by_name": {
+        "url_template": "https://www.anywho.com/people/{name}/{state}/{city}",
+        "crawl_mode": "single",
+        "engine_mode": "auto",
+        
+        "fields": {
+            "name": {
+                "css": "h2, div[class*='name'], span[class*='name']",
+                "field_type": "person_name"
+            },
+            "age": {
+                "css": "div:contains('Age'), span:contains('Age')",
+                "regex": r"Age\s*(\d+)",
+                "field_type": "integer"
+            },
+            "phone": {
+                "css": "a[href*='phone'], div[class*='phone'], span[class*='phone']",
+                "all": True,
+                "field_type": "phone",
+                "smart_config": {"country": "US", "format": "E164"}
+            },
+            "address": {
+                "css": "div[class*='address'], p[class*='address'], span[class*='address']",
+                "field_type": "address"
+            }
+        }
+    },
+    
+    "search_by_phone": {
+        "url_template": "https://www.anywho.com/phone/{phone}",
+        "crawl_mode": "single",
+        "engine_mode": "auto",
+        
+        "fields": {
+            "name": {
+                "css": "h2, div[class*='name']",
+                "field_type": "person_name"
+            },
+            "age": {
+                "css": "div:contains('Age'), span:contains('Age')",
+                "regex": r"Age\s*(\d+)",
+                "field_type": "integer"
+            },
+            "phone": {
+                "css": "a[href*='phone'], div[class*='phone']",
+                "field_type": "phone",
+                "smart_config": {"country": "US", "format": "E164"}
+            },
+            "address": {
+                "css": "div[class*='address'], p[class*='address']",
+                "field_type": "address"
+            }
+        }
+    }
+}
+
+
+# SearchPeopleFree Configuration
+# Based on real HTML structure from searchpeoplefree.com/find/link-pellow/mi/dowagiac
+SEARCH_PEOPLE_FREE = {
+    "name": "SearchPeopleFree",
+    "base_url": "https://www.searchpeoplefree.com",
+    "free": True,
+    "requires_auth": False,
+    
+    "search_by_name": {
+        "url_template": "https://www.searchpeoplefree.com/find/{name}/{state}/{city}",
+        "crawl_mode": "list",  # Returns multiple results
+        "engine_mode": "auto",
+        
+        "list_config": {
+            "item_selector": "li.toc.l-i",  # Each result is in this container
+            "item_links": {
+                "css": "h2.h2 a",
+                "attr": "href",
+                "all": True
+            }
+        },
+        
+        "fields": {
+            "name": {
+                "css": "h2.h2 a",
+                "field_type": "person_name"
+            },
+            "age": {
+                "css": "h3.mb-3 span",
+                "regex": r"(\d+)",  # Extract first number from "29 (1997 or 1996)"
+                "field_type": "integer"
+            },
+            "phone": {
+                "css": "ul.inline.current a[href*='phone-lookup']",
+                "all": True,
+                "field_type": "phone",
+                "smart_config": {"country": "US", "format": "E164"}
+            },
+            "address": {
+                "css": "address a",
+                "field_type": "address"
+            },
+            "person_url": {
+                "css": "h2.h2 a",
+                "attr": "href",
+                "field_type": "string"
+            }
+        }
+    },
+    
+    "search_by_phone": {
+        "url_template": "https://www.searchpeoplefree.com/phone-lookup/{phone}",
+        "crawl_mode": "single",
+        "engine_mode": "auto",
+        
+        "fields": {
+            "name": {
+                "css": "h2.h2 a",
+                "field_type": "person_name"
+            },
+            "age": {
+                "css": "h3.mb-3 span",
+                "regex": r"(\d+)",
+                "field_type": "integer"
+            },
+            "phone": {
+                "css": "ul.inline.current a[href*='phone-lookup']",
+                "field_type": "phone",
+                "smart_config": {"country": "US", "format": "E164"}
+            },
+            "address": {
+                "css": "address a",
+                "field_type": "address"
+            }
+        }
+    }
+}
+
+
+# ZabaSearch Configuration
+# Based on real HTML structure from zabasearch.com/people/link-pellow/michigan/dowagiac/
+ZABA_SEARCH = {
+    "name": "ZabaSearch",
+    "base_url": "https://www.zabasearch.com",
+    "free": True,
+    "requires_auth": False,
+    
+    "search_by_name": {
+        "url_template": "https://www.zabasearch.com/people/{name}/{state_full}/{city}/",
+        "crawl_mode": "single",
+        "engine_mode": "auto",
+        
+        "fields": {
+            "name": {
+                "css": "div#container-name h2 a",
+                "field_type": "person_name"
+            },
+            "age": {
+                "css": "div#container-name + div h3",
+                "field_type": "integer"
+            },
+            "phone": {
+                "css": "div.section-box h3:contains('Associated Phone Numbers') + ul.showMore-list li a",
+                "all": True,
+                "field_type": "phone",
+                "smart_config": {"country": "US", "format": "E164"}
+            },
+            "email": {
+                "css": "div.section-box h3:contains('Associated Email Addresses') + ul.showMore-list li",
+                "all": True,
+                "field_type": "email"
+            },
+            "address": {
+                "css": "div.section-box h3:contains('Last Known Address') ~ div.flex p",
+                "field_type": "address"
+            }
+        }
+    },
+    
+    "search_by_phone": {
+        "url_template": "https://www.zabasearch.com/phone/{phone}/",
+        "crawl_mode": "single",
+        "engine_mode": "auto",
+        
+        "fields": {
+            "name": {
+                "css": "div#container-name h2 a",
+                "field_type": "person_name"
+            },
+            "age": {
+                "css": "div#container-name + div h3",
+                "field_type": "integer"
+            },
+            "phone": {
+                "css": "div.section-box h3:contains('Associated Phone Numbers') + ul.showMore-list li a",
+                "field_type": "phone",
+                "smart_config": {"country": "US", "format": "E164"}
+            },
+            "address": {
+                "css": "div.section-box h3:contains('Last Known Address') ~ div.flex p",
+                "field_type": "address"
+            }
+        }
+    }
+}
+
+
 # Site Registry
 PEOPLE_SEARCH_SITES = {
     "fastpeoplesearch": FAST_PEOPLE_SEARCH,
-    "truepeoplesearch": TRUE_PEOPLE_SEARCH
+    "truepeoplesearch": TRUE_PEOPLE_SEARCH,
+    "thatsthem": THATS_THEM,
+    "anywho": ANY_WHO,
+    "searchpeoplefree": SEARCH_PEOPLE_FREE,
+    "zabasearch": ZABA_SEARCH
 }
 
 

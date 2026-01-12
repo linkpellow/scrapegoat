@@ -520,3 +520,56 @@ def search_by_name_sync(
     except Exception as e:
         logger.error(f"Sync search failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/test/search-specific-site")
+def test_search_specific_site(
+    site_name: str = Query(..., description="Site to test: thatsthem, anywho, searchpeoplefree, zabasearch, fastpeoplesearch, truepeoplesearch"),
+    name: str = Query(..., description="Full name to search"),
+    city: str = Query(None, description="City (optional)"),
+    state: str = Query(None, description="State code (e.g. MI, FL)")
+):
+    """
+    TEST ENDPOINT: Search a specific site directly (for comparison testing).
+    
+    Bypasses the fallback mechanism to test individual sites.
+    """
+    logger.info(f"[TEST] Testing site: {site_name} for {name}, {city}, {state}")
+    
+    # Build search params
+    search_params = {"name": name}
+    if city:
+        search_params["city"] = city
+    if state:
+        search_params["state"] = state
+    
+    try:
+        # Create job for specific site
+        job_id = _create_scraper_job(site_name, "search_by_name", search_params)
+        logger.info(f"[TEST] Created job: {job_id}")
+        
+        # Execute and wait
+        records, _ = _execute_and_wait(job_id, site_name, timeout=90)
+        logger.info(f"[TEST] Got {len(records)} records from {site_name}")
+        
+        # Parse results
+        parsed = PeopleSearchAdapter.parse_search_results(records, site_name)
+        
+        return {
+            "site": site_name,
+            "success": len(records) > 0,
+            "records_count": len(records),
+            "records": parsed,
+            "test_mode": True
+        }
+    
+    except Exception as e:
+        logger.error(f"[TEST] Error testing {site_name}: {e}")
+        return {
+            "site": site_name,
+            "success": False,
+            "records_count": 0,
+            "records": [],
+            "error": str(e),
+            "test_mode": True
+        }
