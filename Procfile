@@ -1,0 +1,2 @@
+web: export APP_DATABASE_URL=$DATABASE_URL && export APP_REDIS_URL=$REDIS_URL && export APP_CELERY_BROKER_URL=$REDIS_URL && export APP_CELERY_RESULT_BACKEND=$REDIS_URL && alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port $PORT
+worker: export APP_DATABASE_URL=$DATABASE_URL && export APP_REDIS_URL=$REDIS_URL && export APP_CELERY_BROKER_URL=$REDIS_URL && export APP_CELERY_RESULT_BACKEND=$REDIS_URL && celery -A app.celery_app worker --loglevel=info --concurrency=2
