@@ -18,7 +18,7 @@ FAST_PEOPLE_SEARCH = {
     "search_by_name": {
         "url_template": "https://www.fastpeoplesearch.com/name/{name}_{city}-{state}",
         "crawl_mode": "single",
-        "engine_mode": "provider",  # Use ScrapingBee for JS rendering
+        "engine_mode": "auto",  # Use auto-escalation (HTTP → Playwright if blocked)
         
         "list_config": {
             "item_links": {
@@ -69,7 +69,7 @@ FAST_PEOPLE_SEARCH = {
     "search_by_phone": {
         "url_template": "https://www.fastpeoplesearch.com/{phone}",
         "crawl_mode": "single",
-        "engine_mode": "provider",  # Use ScrapingBee for JS rendering
+        "engine_mode": "auto",  # Use auto-escalation (HTTP → Playwright if blocked)
         
         "fields": {
             "name": {
@@ -95,7 +95,7 @@ FAST_PEOPLE_SEARCH = {
     "person_details": {
         "url_template": "https://www.fastpeoplesearch.com{person_url}",
         "crawl_mode": "single",
-        "engine_mode": "provider",  # Use ScrapingBee for JS rendering
+        "engine_mode": "auto",  # Use auto-escalation (HTTP → Playwright if blocked)
         
         "fields": {
             "name": {
@@ -153,7 +153,7 @@ TRUE_PEOPLE_SEARCH = {
     "search_by_name": {
         "url_template": "https://www.truepeoplesearch.com/results?name={name}&citystatezip={city}, {state}",
         "crawl_mode": "single",
-        "engine_mode": "provider",  # Use ScrapingBee for JS rendering
+        "engine_mode": "auto",  # Use auto-escalation (HTTP → Playwright if blocked)
         
         "list_config": {
             "item_links": {
@@ -196,7 +196,7 @@ TRUE_PEOPLE_SEARCH = {
     "search_by_phone": {
         "url_template": "https://www.truepeoplesearch.com/results?phoneno={phone}",
         "crawl_mode": "single",
-        "engine_mode": "provider",  # Use ScrapingBee for JS rendering
+        "engine_mode": "auto",  # Use auto-escalation (HTTP → Playwright if blocked)
         
         "fields": {
             "name": {
@@ -222,7 +222,7 @@ TRUE_PEOPLE_SEARCH = {
     "person_details": {
         "url_template": "https://www.truepeoplesearch.com/details{person_url}",
         "crawl_mode": "single",
-        "engine_mode": "provider",  # Use ScrapingBee for JS rendering
+        "engine_mode": "auto",  # Use auto-escalation (HTTP → Playwright if blocked)
         
         "fields": {
             "name": {
