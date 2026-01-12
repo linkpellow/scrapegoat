@@ -2,7 +2,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="APP_", env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(env_prefix="APP_", extra="ignore")
 
     database_url: str = "postgresql+psycopg://postgres:postgres@localhost:5432/scraper"
     redis_url: str = "redis://localhost:6379/0"
