@@ -134,7 +134,9 @@ def _execute_and_wait(job_id: str, site_name: str, timeout: int = 60) -> tuple[L
         db.commit()
         
         # Execute async
-        celery_app.send_task("runs.execute", args=[str(run.id)])
+        logger.info(f"Sending task runs.execute for run_id={run.id}")
+        task = celery_app.send_task("runs.execute", args=[str(run.id)])
+        logger.info(f"Task sent: task_id={task.id}, run_id={run.id}")
         
         # Poll for completion
         start_time = time.time()
