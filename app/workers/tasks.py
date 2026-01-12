@@ -752,15 +752,15 @@ def _execute_with_engine(
         )
         return items, "", 200
     
-        elif engine == "provider":
-            # Provider (ScrapingBee) - handles JS rendering and anti-bot bypassing
-            items = _extract_with_scrapingbee(
-                url=job.target_url,
-                field_map=field_map,
-                crawl_mode=job.crawl_mode,
-                list_config=job.list_config or {}
-            )
-            return items, "", 200
+    elif engine == "provider":
+        # Provider (ScrapingBee) - handles JS rendering and anti-bot bypassing
+        items = _extract_with_scrapingbee(
+            url=job.target_url,
+            field_map=field_map,
+            crawl_mode=job.crawl_mode,
+            list_config=job.list_config or {}
+        )
+        return items, "", 200
     
     else:
         raise ValueError(f"Unknown engine: {engine}")
