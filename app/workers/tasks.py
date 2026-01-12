@@ -796,12 +796,13 @@ def _extract_with_scrapingbee(
             visited_urls.add(current_url)
             page_count += 1
             
-            # Fetch page via ScrapingBee
+            # Fetch page via ScrapingBee with CloudFlare bypass
             params = {
                 'api_key': settings.scrapingbee_api_key,
                 'url': current_url,
                 'render_js': 'true',
-                'premium_proxy': 'false',
+                'premium_proxy': 'true',  # Required for CloudFlare bypass
+                'stealth_proxy': 'true',  # Use stealth mode
                 'country_code': 'us'
             }
             
@@ -827,12 +828,13 @@ def _extract_with_scrapingbee(
                 for item_url in item_urls[:20]:  # Limit to 20 items per page
                     full_item_url = urljoin(current_url, item_url)
                     
-                    # Fetch item detail page
+                    # Fetch item detail page with CloudFlare bypass
                     item_params = {
                         'api_key': settings.scrapingbee_api_key,
                         'url': full_item_url,
                         'render_js': 'true',
-                        'premium_proxy': 'false',
+                        'premium_proxy': 'true',  # Required for CloudFlare bypass
+                        'stealth_proxy': 'true',  # Use stealth mode
                         'country_code': 'us'
                     }
                     
@@ -871,12 +873,13 @@ def _extract_with_scrapingbee(
         return all_items
     
     else:
-        # Single page mode
+        # Single page mode with CloudFlare bypass
         params = {
             'api_key': settings.scrapingbee_api_key,
             'url': url,
             'render_js': 'true',
-            'premium_proxy': 'false',
+            'premium_proxy': 'true',  # Required for CloudFlare bypass
+            'stealth_proxy': 'true',  # Use stealth mode
             'country_code': 'us'
         }
         
