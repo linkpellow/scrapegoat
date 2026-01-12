@@ -782,7 +782,30 @@ def _extract_with_playwright_stable(
         # Fall back to Scrapy for now
         return _scrapy_extract(url, field_map, crawl_mode, list_config or {})
     else:
-        return extract_with_playwright(url, field_map, session_data, browser_profile)
+        import signal
+        
+        def timeout_handler(signum, frame):
+            raise TimeoutError("Playwright execution exceeded 30 seconds")
+        
+        # Set 30-second timeout for Playwright
+        signal.signal(signal.SIGALRM, timeout_handler)
+        signal.alarm(30)
+        
+        try:
+            logger.info(f"🎭 Starting Playwright extraction for {url}")
+            result = extract_with_playwright(url, field_map, session_data, browser_profile)
+            logger.info(f"✅ Playwright completed: {len(result)} items extracted")
+            return result
+        except TimeoutError as e:
+            logger.error(f"⏱️ Playwright timeout after 30s for {url}")
+            return []  # Return empty to trigger escalation
+        except Exception as e:
+            logger.error(f"❌ Playwright error for {url}: {type(e).__name__}: {str(e)}")
+            import traceback
+            logger.error(f"Playwright traceback:\n{traceback.format_exc()}")
+            return []  # Return empty to trigger escalation
+        finally:
+            signal.alarm(0)  # Cancel alarm
 
 
 def _extract_with_scrapingbee(
@@ -950,6 +973,11 @@ def _extract_with_scrapingbee(
                     logger.error(f"ScrapingBee error details: {error_data}")
                 except:
                     pass
+            
+            # Don't raise on 401 (out of credits) - just log and return empty
+            if response.status_code == 401:
+                logger.warning(f"⚠️ ScrapingBee authentication failed (likely out of credits) - returning empty")
+                return []
             
             response.raise_for_status()
             html = response.text
