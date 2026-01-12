@@ -149,12 +149,14 @@ def _execute_and_wait(job_id: str, site_name: str, timeout: int = 60) -> tuple[L
                 return [r.data for r in records], site_name
             
             elif run.status == "failed":
-                logger.warning(f"Scraper failed for {site_name}: {run.error_message}")
+                logger.error(f"❌ Scraper failed for {site_name}: {run.error_message}")
+                logger.error(f"   Run ID: {run.id}, Job ID: {job.id}")
+                logger.error(f"   Failure code: {run.failure_code}")
                 return [], site_name  # Return empty, caller will try next site
             
             time.sleep(1)
         
-        logger.warning(f"Scraper timeout for {site_name}")
+        logger.warning(f"⏱️ Scraper timeout for {site_name} after {timeout}s (run_id={run.id}, status={run.status})")
         return [], site_name  # Return empty on timeout
     
     finally:
