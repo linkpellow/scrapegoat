@@ -16,8 +16,8 @@ FAST_PEOPLE_SEARCH = {
     "requires_auth": False,
     
     "search_by_name": {
-        "url_template": "https://www.fastpeoplesearch.com/name/{name}",
-        "crawl_mode": "list",
+        "url_template": "https://www.fastpeoplesearch.com/name/{name}_{city}-{state}",
+        "crawl_mode": "single",
         "engine_mode": "provider",  # Use ScrapingBee for JS rendering
         
         "list_config": {
@@ -67,7 +67,7 @@ FAST_PEOPLE_SEARCH = {
     },
     
     "search_by_phone": {
-        "url_template": "https://www.fastpeoplesearch.com/phone/{phone}",
+        "url_template": "https://www.fastpeoplesearch.com/{phone}",
         "crawl_mode": "single",
         "engine_mode": "provider",  # Use ScrapingBee for JS rendering
         
@@ -151,8 +151,8 @@ TRUE_PEOPLE_SEARCH = {
     "requires_auth": False,
     
     "search_by_name": {
-        "url_template": "https://www.truepeoplesearch.com/results?name={name}&citystatezip={location}",
-        "crawl_mode": "list",
+        "url_template": "https://www.truepeoplesearch.com/results?name={name}&citystatezip={city}, {state}",
+        "crawl_mode": "single",
         "engine_mode": "provider",  # Use ScrapingBee for JS rendering
         
         "list_config": {

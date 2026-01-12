@@ -103,6 +103,10 @@ class PeopleSearchAdapter:
                 elif key == "phone":
                     # "+1-303-555-0100" -> "13035550100"
                     formatted = re.sub(r'[^0-9]', '', value)
+                elif key in ("city", "state"):
+                    # "Dowagiac" -> "dowagiac", "MI" -> "mi"
+                    formatted = value.lower().replace(" ", "-")
+                    formatted = re.sub(r'[^a-z0-9-]', '', formatted)
                 elif key == "location":
                     # "Denver, CO 80201" -> leave as-is or URL encode
                     formatted = value
