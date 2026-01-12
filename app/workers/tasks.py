@@ -424,10 +424,17 @@ def execute_run(self: Task, run_id: str) -> None:
                                 break
                     
                     # Persist records
+                    # Save records with proper error handling
                     inserted = 0
                     for it in items:
-                        db.add(Record(run_id=run.id, data=it))
-                        inserted += 1
+                        try:
+                            db.add(Record(run_id=run.id, data=it))
+                            db.flush()  # Flush to catch errors early
+                            inserted += 1
+                        except Exception as e:
+                            logger.error(f"Failed to insert record: {e}")
+                            db.rollback()  # Rollback failed insert
+                            continue
                     
                     # Store attempt log (skip if column doesn't exist)
                     try:
@@ -446,7 +453,18 @@ def execute_run(self: Task, run_id: str) -> None:
                         "bias_reason": bias_reason,
                     }
                     complete_run(db, run, stats)
-                    db.commit()
+                    
+                    # Final commit with retry
+                    try:
+                        db.commit()
+                    except Exception as e:
+                        logger.error(f"First commit failed: {e}, retrying in fresh transaction")
+                        db.rollback()
+                        # Reload run and update stats
+                        run = db.query(Run).filter(Run.id == run_id).first()
+                        if run:
+                            complete_run(db, run, stats)
+                            db.commit()
                     
                     # ADAPTIVE INTELLIGENCE: Record successful outcome (separate transaction)
                     try:
