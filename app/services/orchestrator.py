@@ -100,8 +100,12 @@ def fail_run(db: Session, run: Run, failure_code: str, error_message: str) -> No
     run.status = RunStatus.FAILED.value
     run.finished_at = _now()
     run.failure_code = failure_code
-    run.error_message = error_message
-    _add_event(db, run.id, "error", "Run failed", {"failure_code": failure_code, "error_message": error_message})
+    run.error_message = error_message[:1000] if error_message else ""
+    
+    try:
+        _add_event(db, run.id, "error", "Run failed", {"failure_code": failure_code, "error_message": error_message})
+    except Exception:
+        pass  # Events table might not exist
     
     # Emit run failed event (async-safe via Redis pub/sub)
     try:

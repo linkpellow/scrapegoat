@@ -873,8 +873,17 @@ def _extract_with_scrapingbee(
         
         try:
             response = httpx.get(scrapingbee_url, params=params, timeout=60.0)
+            if response.status_code >= 400:
+                logger.error(f"ScrapingBee error {response.status_code}: {response.text[:500]}")
+                # Try to get error details from response
+                try:
+                    error_data = response.json()
+                    logger.error(f"ScrapingBee error details: {error_data}")
+                except:
+                    pass
             response.raise_for_status()
             html = response.text
+            logger.info(f"ScrapingBee success: received {len(html)} bytes")
         except Exception as e:
             logger.error(f"ScrapingBee request failed: {e}")
             raise
