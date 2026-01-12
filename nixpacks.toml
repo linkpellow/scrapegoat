@@ -14,4 +14,4 @@ cmds = [
 cmds = ["echo 'Build complete'"]
 
 [start]
-cmd = ". /opt/venv/bin/activate && export APP_DATABASE_URL=$(echo $DATABASE_URL | sed 's|^postgresql://|postgresql+psycopg://|') && export APP_REDIS_URL=$REDIS_URL && export APP_CELERY_BROKER_URL=$REDIS_URL && export APP_CELERY_RESULT_BACKEND=$REDIS_URL && alembic upgrade head && celery -A app.celery_app worker --loglevel=info --concurrency=2 & uvicorn app.main:app --host 0.0.0.0 --port $PORT"
+cmd = ". /opt/venv/bin/activate && export APP_DATABASE_URL=$(echo $DATABASE_URL | sed 's|^postgresql://|postgresql+psycopg://|') && export APP_REDIS_URL=$REDIS_URL && export APP_CELERY_BROKER_URL=$REDIS_URL && export APP_CELERY_RESULT_BACKEND=$REDIS_URL && alembic upgrade head && celery -A app.celery_app worker --loglevel=info --concurrency=2 > /tmp/celery.log 2>&1 & uvicorn app.main:app --host 0.0.0.0 --port $PORT"
