@@ -544,7 +544,7 @@ def execute_run(self: Task, run_id: str) -> None:
                         decision="failed",
                         success=False
                     )
-                    run.engine_attempts = escalation.get_attempts_log()
+                    # Skip engine_attempts - column doesn't exist
                     
                     # ADAPTIVE INTELLIGENCE: Record failed outcome
                     record_run_outcome(
@@ -657,11 +657,7 @@ def execute_run(self: Task, run_id: str) -> None:
                     escalation_count += 1
                 else:
                     # No more escalation - fail
-                    try:
-                        if hasattr(run, 'engine_attempts'):
-                            run.engine_attempts = escalation.get_attempts_log()
-                    except Exception:
-                        pass
+                    # Skip engine_attempts - column doesn't exist
                     
                     failure = classify_exception(e)
                     
@@ -692,11 +688,7 @@ def execute_run(self: Task, run_id: str) -> None:
                     return
         
         # Max escalations reached
-        try:
-            if hasattr(run, 'engine_attempts'):
-                run.engine_attempts = escalation.get_attempts_log()
-        except Exception:
-            pass
+        # Skip engine_attempts - column doesn't exist
         
         fail_run(db, run, "max_escalations", "Reached maximum escalation attempts")
         db.commit()
@@ -760,15 +752,11 @@ def _execute_with_engine(
         )
         return items, "", 200
     
-    elif engine == "provider":
-        # Provider (ScrapingBee) - handles JS rendering and anti-bot bypassing
-        items = _extract_with_scrapingbee(
-            url=job.target_url,
-            field_map=field_map,
-            crawl_mode=job.crawl_mode,
-            list_config=job.list_config or {}
-        )
-        return items, "", 200
+        elif engine == "provider":
+            # Provider (ScrapingBee) - DISABLED: CloudFlare blocks it
+            # Fall through to let escalation try playwright instead
+            logger.warning("Provider engine requested but disabled - returning empty to trigger escalation")
+            return [], "", 403
     
     else:
         raise ValueError(f"Unknown engine: {engine}")
