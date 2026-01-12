@@ -561,11 +561,17 @@ def execute_run(self: Task, run_id: str) -> None:
                     # NEW LOGIC: Determine if should pause or fail
                     domain = extract_domain(job.target_url)
                     
-                    # Get domain config for access class
-                    domain_config = db.query(DomainConfig).filter(
-                        DomainConfig.domain == domain
-                    ).first()
-                    access_class = domain_config.access_class if domain_config else "public"
+                    # Get domain config for access class (skip if table doesn't exist)
+                    access_class = "public"  # Default
+                    try:
+                        domain_config = db.query(DomainConfig).filter(
+                            DomainConfig.domain == domain
+                        ).first()
+                        if domain_config:
+                            access_class = domain_config.access_class
+                    except Exception:
+                        # Table might not exist - use default
+                        pass
                     
                     # Classify block
                     should_pause, intervention_type, intervention_reason = BlockClassifier.should_pause_for_intervention(
@@ -782,30 +788,16 @@ def _extract_with_playwright_stable(
         # Fall back to Scrapy for now
         return _scrapy_extract(url, field_map, crawl_mode, list_config or {})
     else:
-        import signal
-        
-        def timeout_handler(signum, frame):
-            raise TimeoutError("Playwright execution exceeded 30 seconds")
-        
-        # Set 30-second timeout for Playwright
-        signal.signal(signal.SIGALRM, timeout_handler)
-        signal.alarm(30)
-        
         try:
             logger.info(f"🎭 Starting Playwright extraction for {url}")
             result = extract_with_playwright(url, field_map, session_data, browser_profile)
             logger.info(f"✅ Playwright completed: {len(result)} items extracted")
             return result
-        except TimeoutError as e:
-            logger.error(f"⏱️ Playwright timeout after 30s for {url}")
-            return []  # Return empty to trigger escalation
         except Exception as e:
             logger.error(f"❌ Playwright error for {url}: {type(e).__name__}: {str(e)}")
             import traceback
             logger.error(f"Playwright traceback:\n{traceback.format_exc()}")
             return []  # Return empty to trigger escalation
-        finally:
-            signal.alarm(0)  # Cancel alarm
 
 
 def _extract_with_scrapingbee(
