@@ -431,11 +431,10 @@ def execute_run(self: Task, run_id: str) -> None:
                     
                     # Store attempt log (skip if column doesn't exist)
                     try:
-                        run.engine_attempts = escalation.get_attempts_log()
-                        db.flush()
+                        if hasattr(run, 'engine_attempts'):
+                            run.engine_attempts = escalation.get_attempts_log()
                     except Exception:
-                        db.rollback()
-                        # Continue anyway - this is just optimization data
+                        pass  # Column doesn't exist - skip
                     
                     stats = {
                         "records_inserted": inserted,
@@ -614,10 +613,10 @@ def execute_run(self: Task, run_id: str) -> None:
                 else:
                     # No more escalation - fail
                     try:
-                        run.engine_attempts = escalation.get_attempts_log()
-                        db.flush()
+                        if hasattr(run, 'engine_attempts'):
+                            run.engine_attempts = escalation.get_attempts_log()
                     except Exception:
-                        db.rollback()
+                        pass
                     
                     failure = classify_exception(e)
                     
@@ -649,10 +648,10 @@ def execute_run(self: Task, run_id: str) -> None:
         
         # Max escalations reached
         try:
-            run.engine_attempts = escalation.get_attempts_log()
-            db.flush()
+            if hasattr(run, 'engine_attempts'):
+                run.engine_attempts = escalation.get_attempts_log()
         except Exception:
-            db.rollback()
+            pass
         
         fail_run(db, run, "max_escalations", "Reached maximum escalation attempts")
         db.commit()
