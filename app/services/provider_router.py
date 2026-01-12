@@ -58,10 +58,14 @@ class ProviderRouter:
             - High block rate (>80%) → PROVIDER
             - Lower block rate → AUTO (might work)
         """
-        # Get domain config
-        config = db.query(DomainConfig).filter(
-            DomainConfig.domain == domain
-        ).first()
+        # Get domain config (gracefully handle missing table)
+        try:
+            config = db.query(DomainConfig).filter(
+                DomainConfig.domain == domain
+            ).first()
+        except Exception:
+            # Table doesn't exist or query failed - use defaults
+            config = None
         
         if not config:
             # Unknown domain - use AUTO
@@ -110,9 +114,13 @@ class ProviderRouter:
         - Domain is INFRA (always needs provider)
         - Domain is HUMAN with very high block rate and no session
         """
-        config = db.query(DomainConfig).filter(
-            DomainConfig.domain == domain
-        ).first()
+        try:
+            config = db.query(DomainConfig).filter(
+                DomainConfig.domain == domain
+            ).first()
+        except Exception:
+            # Table doesn't exist or query failed - don't skip
+            return False
         
         if not config:
             return False
@@ -142,9 +150,12 @@ class ProviderRouter:
         - Rendering options (js, premium_proxy, etc.)
         - Timeout settings
         """
-        config = db.query(DomainConfig).filter(
-            DomainConfig.domain == domain
-        ).first()
+        try:
+            config = db.query(DomainConfig).filter(
+                DomainConfig.domain == domain
+            ).first()
+        except Exception:
+            config = None
         
         # Determine provider
         if not provider_name:
