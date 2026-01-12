@@ -662,11 +662,20 @@ def execute_run(self: Task, run_id: str) -> None:
         import traceback
         logger.error(f"Run {run_id}: Traceback:\n{traceback.format_exc()}")
         try:
-            failure = classify_exception(e)
-            fail_run(db, run, failure.code.value, failure.message)
-            db.commit()
+            # Rollback any pending transaction first
+            db.rollback()
+            # Reload run in fresh transaction
+            run = db.query(Run).filter(Run.id == run_id).first()
+            if run:
+                failure = classify_exception(e)
+                fail_run(db, run, failure.code.value, failure.message)
+                db.commit()
         except Exception as e2:
             logger.error(f"Run {run_id}: Failed to classify/fail run: {e2}")
+            try:
+                db.rollback()
+            except:
+                pass
     finally:
         db.close()
 
