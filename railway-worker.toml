@@ -1,0 +1,7 @@
+[build]
+builder = "NIXPACKS"
+
+[deploy]
+startCommand = "export APP_DATABASE_URL=$(echo $APP_DATABASE_URL | sed 's|^postgresql://|postgresql+psycopg://|') && export APP_CELERY_BROKER_URL=$APP_REDIS_URL && export APP_CELERY_RESULT_BACKEND=$APP_REDIS_URL && celery -A app.celery_app worker --loglevel=info --concurrency=2 --pool=solo"
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10
