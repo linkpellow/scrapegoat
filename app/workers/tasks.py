@@ -803,6 +803,7 @@ def _extract_with_scrapingbee(
                 'render_js': 'true',
                 'premium_proxy': 'true',  # Required for CloudFlare bypass
                 'stealth_proxy': 'true',  # Use stealth mode
+                'block_resources': 'false',  # Don't block resources (helps with CloudFlare)
                 'country_code': 'us'
             }
             
@@ -835,6 +836,7 @@ def _extract_with_scrapingbee(
                         'render_js': 'true',
                         'premium_proxy': 'true',  # Required for CloudFlare bypass
                         'stealth_proxy': 'true',  # Use stealth mode
+                        'block_resources': 'false',  # Don't block resources
                         'country_code': 'us'
                     }
                     
@@ -880,6 +882,7 @@ def _extract_with_scrapingbee(
             'render_js': 'true',
             'premium_proxy': 'true',  # Required for CloudFlare bypass
             'stealth_proxy': 'true',  # Use stealth mode
+            'block_resources': 'false',  # Don't block resources (helps with CloudFlare)
             'country_code': 'us'
         }
         
