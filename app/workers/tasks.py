@@ -760,14 +760,33 @@ def _execute_with_engine(
         return items, "", 200
     
     elif engine == "provider":
-        # Provider (ScrapingBee) - handles JS rendering and anti-bot bypassing
-        items = _extract_with_scrapingbee(
-            url=job.target_url,
-            field_map=field_map,
-            crawl_mode=job.crawl_mode,
-            list_config=job.list_config or {}
-        )
-        return items, "", 200
+        # Provider (ScrapingBee or ScraperAPI) - handles JS rendering and anti-bot bypassing
+        # Try ScrapingBee first, fallback to ScraperAPI if ScrapingBee fails or is out of credits
+        try:
+            items = _extract_with_scrapingbee(
+                url=job.target_url,
+                field_map=field_map,
+                crawl_mode=job.crawl_mode,
+                list_config=job.list_config or {}
+            )
+            if items:
+                return items, "", 200
+        except (ValueError, Exception) as e:
+            logger.warning(f"ScrapingBee failed: {e}, trying ScraperAPI fallback...")
+        
+        # Fallback to ScraperAPI
+        try:
+            from app.workers.scraperapi_extract import _extract_with_scraperapi
+            items = _extract_with_scraperapi(
+                url=job.target_url,
+                field_map=field_map,
+                crawl_mode=job.crawl_mode,
+                list_config=job.list_config or {}
+            )
+            return items, "", 200
+        except Exception as e:
+            logger.error(f"Both ScrapingBee and ScraperAPI failed: {e}")
+            raise
     
     else:
         raise ValueError(f"Unknown engine: {engine}")
@@ -967,10 +986,10 @@ def _extract_with_scrapingbee(
                 except:
                     pass
             
-            # Don't raise on 401 (out of credits) - just log and return empty
+            # Don't raise on 401 (out of credits) - escalate to ScraperAPI
             if response.status_code == 401:
-                logger.warning(f"⚠️ ScrapingBee authentication failed (likely out of credits) - returning empty")
-                return []
+                logger.warning(f"⚠️ ScrapingBee authentication failed (likely out of credits) - will try ScraperAPI")
+                raise ValueError("ScrapingBee out of credits - escalate to ScraperAPI")
             
             response.raise_for_status()
             html = response.text
