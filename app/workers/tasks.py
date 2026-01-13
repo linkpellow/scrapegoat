@@ -705,23 +705,31 @@ def execute_run(self: Task, run_id: str) -> None:
         logger.error(f"Run {run_id}: TOP-LEVEL EXCEPTION: {type(e).__name__}: {str(e)}")
         import traceback
         logger.error(f"Run {run_id}: Traceback:\n{traceback.format_exc()}")
+        
+        # Close the bad session and use a fresh one
         try:
-            # Rollback any pending transaction first
             db.rollback()
-            # Reload run in fresh transaction
-            run = db.query(Run).filter(Run.id == run_id).first()
+        except:
+            pass
+        finally:
+            db.close()
+        
+        # Use fresh session to mark run as failed
+        fresh_db = _db()
+        try:
+            run = fresh_db.query(Run).filter(Run.id == run_id).first()
             if run:
                 failure = classify_exception(e)
-                fail_run(db, run, failure.code.value, failure.message)
-                db.commit()
+                fail_run(fresh_db, run, failure.code.value, failure.message)
+                fresh_db.commit()
         except Exception as e2:
             logger.error(f"Run {run_id}: Failed to classify/fail run: {e2}")
             try:
-                db.rollback()
+                fresh_db.rollback()
             except:
                 pass
-    finally:
-        db.close()
+        finally:
+            fresh_db.close()
 
 
 def _execute_with_engine(
