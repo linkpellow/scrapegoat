@@ -120,7 +120,9 @@ def _execute_and_wait(job_id: str, site_name: str, timeout: int = 60) -> tuple[L
     Returns:
         (records, site_used)
     """
+    # Create run in initial session
     db = _db()
+    run_id = None
     try:
         # Get job to determine strategy
         job = db.query(Job).filter(Job.id == job_id).first()
@@ -131,36 +133,58 @@ def _execute_and_wait(job_id: str, site_name: str, timeout: int = 60) -> tuple[L
         from app.enums import ExecutionStrategy
         resolved = ExecutionStrategy(job.strategy)
         run = create_run(db, job, resolved)
+        run_id = str(run.id)
         db.commit()
         
         # Execute async
         logger.info(f"Sending task runs.execute for run_id={run.id}")
-        task = celery_app.send_task("runs.execute", args=[str(run.id)])
+        task = celery_app.send_task("runs.execute", args=[run_id])
         logger.info(f"Task sent: task_id={task.id}, run_id={run.id}")
-        
-        # Poll for completion
-        start_time = time.time()
-        while time.time() - start_time < timeout:
-            db.refresh(run)
+    finally:
+        db.close()
+    
+    # Poll for completion using fresh sessions to avoid PendingRollbackError
+    start_time = time.time()
+    while time.time() - start_time < timeout:
+        # Use fresh session for each poll
+        poll_db = _db()
+        try:
+            run = poll_db.query(Run).filter(Run.id == run_id).first()
+            if not run:
+                logger.warning(f"Run {run_id} not found")
+                time.sleep(1)
+                continue
             
             if run.status == "completed":
                 # Get records
-                records = db.query(Record).filter(Record.run_id == run.id).all()
+                records = poll_db.query(Record).filter(Record.run_id == run.id).all()
                 return [r.data for r in records], site_name
             
             elif run.status == "failed":
                 logger.error(f"❌ Scraper failed for {site_name}: {run.error_message}")
-                logger.error(f"   Run ID: {run.id}, Job ID: {job.id}")
+                logger.error(f"   Run ID: {run.id}, Job ID: {job_id}")
                 logger.error(f"   Failure code: {run.failure_code}")
                 return [], site_name  # Return empty, caller will try next site
             
             time.sleep(1)
-        
-        logger.warning(f"⏱️ Scraper timeout for {site_name} after {timeout}s (run_id={run.id}, status={run.status})")
-        return [], site_name  # Return empty on timeout
+        except Exception as e:
+            logger.warning(f"Error polling run status: {e}, retrying...")
+            time.sleep(1)
+        finally:
+            poll_db.close()
     
+    # Final check on timeout
+    final_db = _db()
+    try:
+        run = final_db.query(Run).filter(Run.id == run_id).first()
+        status = run.status if run else "unknown"
+        logger.warning(f"⏱️ Scraper timeout for {site_name} after {timeout}s (run_id={run_id}, status={status})")
+    except Exception as e:
+        logger.warning(f"Error checking final status: {e}")
     finally:
-        db.close()
+        final_db.close()
+    
+    return [], site_name  # Return empty on timeout
 
 
 def _execute_with_fallback(
