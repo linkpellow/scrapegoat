@@ -41,8 +41,12 @@ class Settings(BaseSettings):
             keys.append(key.strip())
             i += 1
         
-        # Check for single key
-        single_key = os.getenv("SCRAPERAPI_KEY") or os.getenv("APP_SCRAPERAPI_KEY")
+        # Check for single key (multiple variants)
+        single_key = (
+            os.getenv("SCRAPERAPI_KEY") or 
+            os.getenv("APP_SCRAPERAPI_KEY") or 
+            os.getenv("APP_SCRAPERAPI_API_KEY")  # User's preferred format
+        )
         if single_key and single_key not in keys:
             keys.append(single_key.strip())
         
