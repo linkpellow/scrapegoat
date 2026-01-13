@@ -38,7 +38,8 @@ def _db() -> Session:
 
 
 # Configuration: Site priority (try in order)
-SITE_PRIORITY = ["fastpeoplesearch", "truepeoplesearch"]
+# Agreed-upon order: ThatsThem (most complete) → SearchPeopleFree (fast) → ZabaSearch (reliable) → FastPeopleSearch (fallback)
+SITE_PRIORITY = ["thatsthem", "searchpeoplefree", "zabasearch", "fastpeoplesearch"]
 
 
 # Request/Response Models

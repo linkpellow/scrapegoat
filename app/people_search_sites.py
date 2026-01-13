@@ -281,7 +281,7 @@ THATS_THEM = {
     "search_by_name": {
         "url_template": "https://thatsthem.com/name/{name}/{city}-{state_upper}",
         "crawl_mode": "single",
-        "engine_mode": "auto",  # Start with HTTP, escalate to Playwright if needed, ScrapingBee as last resort
+        "engine_mode": "auto",  # Start with HTTP, escalate to Playwright if needed, ScrapingBee/ScraperAPI as last resort
         
         "fields": {
             "name": {
