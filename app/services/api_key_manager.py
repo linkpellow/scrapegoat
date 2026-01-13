@@ -14,7 +14,7 @@ import hashlib
 import logging
 
 from app.models.api_key_usage import ApiKeyUsage
-from app.database import SessionLocal, get_db_session
+from app.database import SessionLocal
 
 logger = logging.getLogger(__name__)
 
