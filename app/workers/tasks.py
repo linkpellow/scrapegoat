@@ -65,6 +65,22 @@ def _db() -> Session:
     return SessionLocal()
 
 
+def _ensure_clean_session(db: Session) -> Session:
+    """Ensure database session is in a clean state, return fresh session if needed."""
+    try:
+        # Try a simple query to check if session is healthy
+        db.execute("SELECT 1")
+        return db
+    except Exception:
+        # Session is in bad state, close it and return fresh one
+        try:
+            db.rollback()
+            db.close()
+        except:
+            pass
+        return SessionLocal()
+
+
 def _load_field_map(db: Session, job_id: str, job_fields: List[str]) -> tuple[Dict[str, Dict[str, Any]], Dict[str, FieldMap]]:
     """
     Returns (selector_map, field_map_objects).
@@ -373,12 +389,9 @@ def execute_run(self: Task, run_id: str) -> None:
                 )
                 logger.info(f"Run {run_id}: Engine {current_engine} returned {len(items) if items else 0} items, status={status_code}")
             except Exception as exec_error:
-                # If execution fails, rollback and use fresh session for any DB operations
+                # If execution fails, ensure session is clean for any subsequent DB operations
                 logger.error(f"Run {run_id}: Execution error with engine {current_engine}: {exec_error}")
-                try:
-                    db.rollback()
-                except:
-                    pass
+                db = _ensure_clean_session(db)
                 # Re-raise to be handled by outer exception handler
                 raise
                 
