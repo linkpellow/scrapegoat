@@ -372,6 +372,15 @@ def execute_run(self: Task, run_id: str) -> None:
                     browser_profile=browser_profile
                 )
                 logger.info(f"Run {run_id}: Engine {current_engine} returned {len(items) if items else 0} items, status={status_code}")
+            except Exception as exec_error:
+                # If execution fails, rollback and use fresh session for any DB operations
+                logger.error(f"Run {run_id}: Execution error with engine {current_engine}: {exec_error}")
+                try:
+                    db.rollback()
+                except:
+                    pass
+                # Re-raise to be handled by outer exception handler
+                raise
                 
                 # Check if we got results
                 if items:
