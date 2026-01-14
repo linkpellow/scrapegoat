@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 import logging
 import os
+import subprocess
+import sys
 import tempfile
 from typing import Any, Dict, List, Optional
 
@@ -31,10 +33,7 @@ from app.services.orchestrator import (
     escalate_strategy,
 )
 
-# Scrapy imports
-from scrapy.crawler import CrawlerProcess
-from scrapy.utils.project import get_project_settings
-from app.scraping.spiders.generic import GenericJobSpider
+# Scrapy is run via subprocess to avoid ReactorNotRestartable
 from app.scraping.playwright_extract import extract_with_playwright
 from app.scraping.auto_escalation import AutoEscalationEngine, generate_browser_profile
 from app.intelligence.adaptive_engine import (
@@ -187,39 +186,58 @@ def _apply_smartfields(
 
 def _scrapy_extract(start_url: str, field_map: Dict[str, Any], crawl_mode: str = "single", list_config: Dict[str, Any] | None = None) -> List[Dict[str, Any]]:
     """
-    Runs Scrapy spider and returns list of items by writing to a temp JSON feed.
-    This avoids Twisted reactor lifetime issues inside Celery.
+    Runs Scrapy spider in an isolated subprocess to avoid ReactorNotRestartable errors.
+    
+    This is the industry-standard approach for running Scrapy in Celery workers.
+    Each execution gets a fresh process with a clean reactor state.
     """
-    with tempfile.TemporaryDirectory() as tmpdir:
-        out_path = os.path.join(tmpdir, "items.json")
-
-        s = get_project_settings()
-        # Make it self-contained even without a scrapy.cfg project.
-        custom_settings = {
-            "LOG_ENABLED": False,
-            "ROBOTSTXT_OBEY": False,
-            "DOWNLOAD_TIMEOUT": settings.http_timeout_seconds,
-            "USER_AGENT": "scraper-platform/1.0",
-            "FEEDS": {out_path: {"format": "json", "encoding": "utf8", "indent": 2}},
-        }
-
-        process = CrawlerProcess(settings={**dict(s), **custom_settings})
-        process.crawl(
-            GenericJobSpider,
-            start_url=start_url,
-            field_map=field_map,
-            crawl_mode=crawl_mode,
-            list_config=list_config or {},
+    # Prepare arguments for subprocess
+    script_path = os.path.join(os.path.dirname(__file__), "..", "scraping", "run_scrapy_isolated.py")
+    script_path = os.path.abspath(script_path)
+    
+    args = {
+        "start_url": start_url,
+        "field_map": field_map,
+        "crawl_mode": crawl_mode,
+        "list_config": list_config or {},
+        "timeout": settings.http_timeout_seconds,
+    }
+    
+    try:
+        # Run Scrapy in isolated subprocess
+        result = subprocess.run(
+            [sys.executable, script_path, json.dumps(args)],
+            capture_output=True,
+            text=True,
+            timeout=settings.http_timeout_seconds + 10,  # Add buffer for subprocess overhead
+            check=False
         )
-        process.start()  # blocks until done
-
-        if not os.path.exists(out_path):
+        
+        if result.returncode != 0:
+            logger.error(f"Scrapy subprocess failed: {result.stderr}")
             return []
-
-        with open(out_path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-
-        return data if isinstance(data, list) else []
+        
+        # Parse JSON output
+        output = result.stdout.strip()
+        if not output:
+            return []
+        
+        data = json.loads(output)
+        if not data.get("success"):
+            logger.error(f"Scrapy extraction failed: {data.get('error', 'Unknown error')}")
+            return []
+        
+        return data.get("items", [])
+        
+    except subprocess.TimeoutExpired:
+        logger.error(f"Scrapy subprocess timed out after {settings.http_timeout_seconds + 10}s")
+        return []
+    except json.JSONDecodeError as e:
+        logger.error(f"Failed to parse Scrapy output: {e}, stdout: {result.stdout[:500]}")
+        return []
+    except Exception as e:
+        logger.error(f"Error running Scrapy subprocess: {e}")
+        return []
 
 
 @celery_app.task(bind=True, name="runs.execute", autoretry_for=(), retry_backoff=False)

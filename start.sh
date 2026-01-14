@@ -13,9 +13,9 @@ export APP_CELERY_RESULT_BACKEND=$REDIS_URL
 # Run migrations
 alembic upgrade head
 
-# Start Celery worker in background with solo pool to avoid ReactorNotRestartable
+# Start Celery worker in background (normal pool - Scrapy runs in subprocess)
 echo "Starting Celery worker..."
-celery -A app.celery_app worker --loglevel=info --pool=solo --concurrency=1 &
+celery -A app.celery_app worker --loglevel=info --concurrency=2 &
 CELERY_PID=$!
 echo "Celery worker started with PID $CELERY_PID"
 
