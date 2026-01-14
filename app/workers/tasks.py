@@ -69,7 +69,8 @@ def _ensure_clean_session(db: Session) -> Session:
     """Ensure database session is in a clean state, return fresh session if needed."""
     try:
         # Try a simple query to check if session is healthy
-        db.execute("SELECT 1")
+        from sqlalchemy import text
+        db.execute(text("SELECT 1"))
         return db
     except Exception:
         # Session is in bad state, close it and return fresh one
