@@ -192,8 +192,14 @@ def _scrapy_extract(start_url: str, field_map: Dict[str, Any], crawl_mode: str =
     Each execution gets a fresh process with a clean reactor state.
     """
     # Prepare arguments for subprocess
-    script_path = os.path.join(os.path.dirname(__file__), "..", "scraping", "run_scrapy_isolated.py")
+    # Resolve script path relative to this file's location
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    script_path = os.path.join(current_dir, "..", "scraping", "run_scrapy_isolated.py")
     script_path = os.path.abspath(script_path)
+    
+    if not os.path.exists(script_path):
+        logger.error(f"Scrapy isolation script not found at: {script_path}")
+        return []
     
     args = {
         "start_url": start_url,
